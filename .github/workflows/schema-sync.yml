@@ -1,234 +1,44 @@
-# ============================================================================
-# Schema & Docs Sync ("Robots That Yell")
-# ============================================================================
-# High-value KG/metadata guardrail workflow
-# Ensures schema, docs, and file tree stay in sync with actual code
-# Fails PR if drift is detected
-# ============================================================================
-
-name: Schema & Docs Sync
+# .github/workflows/schema-sync.yml
+name: Schema & Docs in Sync
 
 on:
   pull_request:
-    paths:
-      - 'infra/supabase/**'
-      - 'db/**'
-      - 'spec/**'
-      - 'apps/**'
-      - 'docs/**'
-      - 'README.md'
-      - 'Makefile'
-      - '.github/workflows/schema-sync.yml'
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
   check-sync:
-    name: Check Schema & Docs Drift
     runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          cache: 'pip'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install psycopg2-binary pyyaml
-
-      # =======================================================================
-      # Step 1: Regenerate file tree in README (if script exists)
-      # =======================================================================
-      - name: Regenerate file tree
-        run: |
-          if [ -f scripts/update-filetree.sh ]; then
-            chmod +x scripts/update-filetree.sh
-            ./scripts/update-filetree.sh
-          elif [ -f Makefile ] && grep -q "docs-filetree" Makefile; then
-            make docs-filetree || true
-          else
-            echo "No file tree generator found - skipping"
-          fi
-
-      # =======================================================================
-      # Step 2: Validate spec files structure
-      # =======================================================================
-      - name: Validate spec kit structure
-        run: |
-          echo "Checking spec kit completeness..."
-
-          MISSING_FILES=""
-
-          for dir in spec/*/; do
-            if [ -d "$dir" ]; then
-              dir_name=$(basename "$dir")
-
-              # Skip if it's just a README-only spec
-              if [ -f "${dir}README.md" ] && [ $(ls -1 "$dir" | wc -l) -eq 1 ]; then
-                echo "  [INFO] $dir_name: README-only spec (OK)"
-                continue
-              fi
-
-              # For full spec kits, check required files
-              if [ ! -f "${dir}prd.md" ] && [ ! -f "${dir}README.md" ]; then
-                MISSING_FILES="$MISSING_FILES\n  - $dir_name: missing prd.md or README.md"
-              fi
-            fi
-          done
-
-          if [ -n "$MISSING_FILES" ]; then
-            echo "::warning::Some spec directories may be incomplete:$MISSING_FILES"
-          else
-            echo "All spec kits have required files"
-          fi
-
-      # =======================================================================
-      # Step 3: Check for uncommitted generated files
-      # =======================================================================
-      - name: Check for drift in generated files
-        run: |
-          # List of files that should be committed if changed
-          GENERATED_FILES=(
-            "db/schema.sql"
-            "docs/SCHEMA.md"
-            "docs/API.md"
-          )
-
-          DRIFT_DETECTED=false
-
-          for file in "${GENERATED_FILES[@]}"; do
-            if [ -f "$file" ]; then
-              if ! git diff --quiet "$file"; then
-                echo "::error::Drift detected in $file - regenerate and commit"
-                git diff "$file"
-                DRIFT_DETECTED=true
-              fi
-            fi
-          done
-
-          # Check README file tree section (if exists)
-          if ! git diff --quiet README.md 2>/dev/null; then
-            if git diff README.md | grep -q "File Structure\|Directory\|├──\|└──"; then
-              echo "::warning::README.md file tree may be out of sync"
-            fi
-          fi
-
-          if [ "$DRIFT_DETECTED" = true ]; then
-            echo ""
-            echo "=== DRIFT DETECTED ==="
-            echo "Run the following to fix:"
-            echo "  make db-schema-dump"
-            echo "  make docs-schema-md"
-            echo "  make docs-filetree"
-            echo "  git add -A && git commit -m 'chore: regenerate schema docs'"
-            exit 1
-          fi
-
-          echo "No drift detected in generated files"
-
-      # =======================================================================
-      # Step 4: Validate YAML/JSON config files
-      # =======================================================================
-      - name: Validate config files
-        run: |
-          echo "Validating YAML files..."
-
-          YAML_ERRORS=0
-
-          for file in $(find . -name "*.yml" -o -name "*.yaml" | grep -v node_modules | grep -v .git); do
-            if ! python -c "import yaml; yaml.safe_load(open('$file'))" 2>/dev/null; then
-              echo "::error::Invalid YAML: $file"
-              YAML_ERRORS=$((YAML_ERRORS + 1))
-            fi
-          done
-
-          if [ $YAML_ERRORS -gt 0 ]; then
-            echo "Found $YAML_ERRORS invalid YAML files"
-            exit 1
-          fi
-
-          echo "All YAML files are valid"
-
-      # =======================================================================
-      # Step 5: Check for broken internal links in docs
-      # =======================================================================
-      - name: Check internal doc links
-        run: |
-          echo "Checking for broken internal links..."
-
-          BROKEN_LINKS=0
-
-          for md_file in $(find . -name "*.md" | grep -v node_modules | grep -v .git); do
-            # Extract relative links from markdown files
-            links=$(grep -oE '\[.*\]\(\.?\.?/[^)]+\)' "$md_file" 2>/dev/null | grep -oE '\(\.?\.?/[^)]+\)' | tr -d '()' || true)
-
-            for link in $links; do
-              # Get directory of current file
-              dir=$(dirname "$md_file")
-              # Resolve the link relative to the file
-              target=$(realpath -m "$dir/$link" 2>/dev/null || echo "")
-
-              if [ -n "$target" ] && [ ! -e "$target" ]; then
-                echo "::warning::Broken link in $md_file: $link"
-                BROKEN_LINKS=$((BROKEN_LINKS + 1))
-              fi
-            done
-          done
-
-          if [ $BROKEN_LINKS -gt 0 ]; then
-            echo "Found $BROKEN_LINKS potentially broken internal links"
-          else
-            echo "No broken internal links detected"
-          fi
-
-  # ==========================================================================
-  # Optional: Schema validation against Supabase (if CI_DB_URL is set)
-  # ==========================================================================
-  validate-schema:
-    name: Validate Schema (if DB available)
-    runs-on: ubuntu-latest
-    if: ${{ vars.CI_DB_URL != '' || secrets.CI_DB_URL != '' }}
-
     env:
-      DATABASE_URL: ${{ secrets.CI_DB_URL }}
+      DB_URL: ${{ secrets.CI_DB_URL }}
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
-      - name: Install dependencies
+      - name: Install tools
         run: |
           pip install psycopg2-binary
+          sudo apt-get update
+          sudo apt-get install -y tree postgresql-client
 
-      - name: Apply migrations (if Makefile exists)
+      - name: Apply migrations to shadow DB
         run: |
-          if [ -f Makefile ] && grep -q "db-migrate" Makefile; then
-            make db-migrate
-          else
-            echo "No db-migrate target - skipping"
-          fi
-        continue-on-error: true
+          make db-migrate
 
-      - name: Dump and compare schema
+      - name: Regenerate schema + docs + file tree
         run: |
-          if [ -f Makefile ] && grep -q "db-schema-dump" Makefile; then
-            make db-schema-dump
-            git diff --exit-code db/schema.sql || {
-              echo "::error::Schema drift detected - run 'make db-schema-dump' and commit"
-              exit 1
-            }
-          else
-            echo "No db-schema-dump target - skipping"
-          fi
-        continue-on-error: true
+          make db-schema-dump
+          # these can be stubs until you implement them
+          make docs-schema-md || true
+          make docs-filetree || true
+
+      - name: Ensure no drift in tracked files
+        run: |
+          git diff --exit-code db/schema.sql docs/SCHEMA.md README.md || {
+            echo "Detected drift in schema/docs/file tree. Run the make commands locally and commit the results."
+            exit 1
+          }

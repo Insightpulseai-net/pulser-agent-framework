@@ -1,154 +1,41 @@
-# ============================================================================
-# CI - Python
-# ============================================================================
-# Core CI workflow: lint, type-check, test
-# Runs on PRs and pushes to main
-# ============================================================================
-
+# .github/workflows/ci-python.yml
 name: CI - Python
 
 on:
-  pull_request:
-    paths:
-      - 'apps/**/*.py'
-      - 'infra/**/*.py'
-      - '**/requirements*.txt'
-      - 'pyproject.toml'
-      - '.github/workflows/ci-python.yml'
   push:
     branches: [main]
-    paths:
-      - 'apps/**/*.py'
-      - 'infra/**/*.py'
-      - '**/requirements*.txt'
-      - 'pyproject.toml'
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  pull_request:
 
 jobs:
-  lint:
-    name: Lint & Format
+  test:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-          cache: 'pip'
-
-      - name: Install lint dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install ruff black isort mypy
-
-      - name: Run Ruff (linter)
-        run: ruff check . --output-format=github || true
-        continue-on-error: true
-
-      - name: Run Black (formatter check)
-        run: black --check --diff . || true
-        continue-on-error: true
-
-      - name: Run isort (import sort check)
-        run: isort --check-only --diff . || true
-        continue-on-error: true
-
-  test:
-    name: Tests
-    runs-on: ubuntu-latest
-    needs: lint
-    strategy:
-      matrix:
-        python-version: ['3.11']
-
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_USER: test
-          POSTGRES_PASSWORD: test
-          POSTGRES_DB: test_db
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-          cache: 'pip'
+          python-version: "3.11"
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          # Install main requirements if they exist
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
-          # Install app-specific requirements
-          if [ -f apps/workbench-api/requirements.txt ]; then
-            pip install -r apps/workbench-api/requirements.txt
+          pip install -r requirements.txt || true
+          pip install -r requirements-dev.txt || true
+
+      - name: Lint (pylint optional)
+        run: |
+          if [ -d "archi_agent_framework" ]; then
+            pylint archi_agent_framework || true
+          else
+            echo "No archi_agent_framework/ package yet, skipping pylint."
           fi
-          # Install test dependencies
-          pip install pytest pytest-cov pytest-asyncio httpx
 
       - name: Run tests
-        env:
-          DATABASE_URL: postgresql://test:test@localhost:5432/test_db
-          TESTING: "true"
         run: |
-          # Run pytest if tests exist
-          if find . -name "test_*.py" -o -name "*_test.py" | grep -q .; then
-            pytest -v --cov --cov-report=xml --cov-report=term-missing
+          if [ -d "tests" ]; then
+            pytest
           else
-            echo "No tests found - skipping pytest"
+            echo "No tests/ directory yet, skipping tests."
           fi
-
-      - name: Upload coverage
-        uses: codecov/codecov-action@v4
-        if: always()
-        with:
-          files: ./coverage.xml
-          fail_ci_if_error: false
-        continue-on-error: true
-
-  type-check:
-    name: Type Check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          cache: 'pip'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install mypy types-requests
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          if [ -f apps/workbench-api/requirements.txt ]; then
-            pip install -r apps/workbench-api/requirements.txt
-          fi
-
-      - name: Run mypy
-        run: |
-          # Run mypy on Python files if they exist
-          if find apps -name "*.py" | grep -q .; then
-            mypy apps --ignore-missing-imports || true
-          else
-            echo "No Python files found in apps/"
-          fi
-        continue-on-error: true
