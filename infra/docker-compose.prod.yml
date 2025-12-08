@@ -1,0 +1,173 @@
+version: '3.8'
+
+# =============================================================================
+# Production Environment Override
+# InsightPulseAI Concur Suite
+# =============================================================================
+#
+# Production-specific configuration:
+# - Secure passwords from secrets
+# - Resource limits enforced
+# - Restart policies
+# - Health checks
+# - SSL/TLS via Traefik
+#
+# Usage:
+#   docker compose -f docker-compose.base.yml -f docker-compose.odoo.yml -f docker-compose.prod.yml up -d
+#
+
+services:
+  # ===========================================================================
+  # PostgreSQL - Production Config
+  # ===========================================================================
+  postgres:
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+    environment:
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets:
+      - postgres_password
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
+
+  # ===========================================================================
+  # Redis - Production Config
+  # ===========================================================================
+  redis:
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  # ===========================================================================
+  # MinIO - Production Config
+  # ===========================================================================
+  minio:
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 2G
+    environment:
+      MINIO_ROOT_PASSWORD_FILE: /run/secrets/minio_password
+    secrets:
+      - minio_password
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
+
+  # ===========================================================================
+  # Odoo - Production Config
+  # ===========================================================================
+  odoo:
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 8G
+        reservations:
+          cpus: '1'
+          memory: 2G
+    environment:
+      PASSWORD_FILE: /run/secrets/postgres_password
+      ODOO_PASSWORD_FILE: /run/secrets/odoo_admin_password
+      # Production settings
+      DEV_MODE: "False"
+      LOG_LEVEL: warn
+      WORKERS: 4
+      MAX_CRON_THREADS: 2
+      # Disable database manager
+      LIST_DB: "False"
+    secrets:
+      - postgres_password
+      - odoo_admin_password
+    volumes:
+      # Read-only addons in production
+      - ../odoo/addons:/mnt/extra-addons/ipai:ro
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200m"
+        max-file: "10"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.odoo.rule=Host(`erp.insightpulseai.net`)"
+      - "traefik.http.routers.odoo.entrypoints=websecure"
+      - "traefik.http.routers.odoo.tls.certresolver=letsencrypt"
+      - "traefik.http.services.odoo.loadbalancer.server.port=8069"
+      # Security headers
+      - "traefik.http.middlewares.odoo-headers.headers.stsSeconds=31536000"
+      - "traefik.http.middlewares.odoo-headers.headers.stsIncludeSubdomains=true"
+      - "traefik.http.routers.odoo.middlewares=odoo-headers"
+
+  # ===========================================================================
+  # Odoo Worker - Production Config
+  # ===========================================================================
+  odoo-worker:
+    profiles: []  # Always enabled in production
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+    secrets:
+      - postgres_password
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
+
+  # ===========================================================================
+  # Traefik - Production Config
+  # ===========================================================================
+  traefik:
+    profiles: []  # Always enabled in production
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+# =============================================================================
+# Secrets
+# =============================================================================
+secrets:
+  postgres_password:
+    file: ./secrets/postgres_password.txt
+  odoo_admin_password:
+    file: ./secrets/odoo_admin_password.txt
+  minio_password:
+    file: ./secrets/minio_password.txt
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  backend:
+    driver: bridge
+  frontend:
+    driver: bridge

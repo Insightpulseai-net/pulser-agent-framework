@@ -1,0 +1,101 @@
+version: '3.8'
+
+# =============================================================================
+# Development Environment Override
+# InsightPulseAI Concur Suite
+# =============================================================================
+#
+# Development-specific configuration:
+# - Exposed ports for debugging
+# - Mounted source code for live reload
+# - Debug mode enabled
+# - Relaxed resource limits
+#
+# Usage:
+#   docker compose -f docker-compose.base.yml -f docker-compose.odoo.yml -f docker-compose.dev.yml up
+#
+
+services:
+  # ===========================================================================
+  # PostgreSQL - Development Config
+  # ===========================================================================
+  postgres:
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_PASSWORD: devpassword123
+
+  # ===========================================================================
+  # Redis - Development Config
+  # ===========================================================================
+  redis:
+    ports:
+      - "6379:6379"
+
+  # ===========================================================================
+  # MinIO - Development Config
+  # ===========================================================================
+  minio:
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+
+  # ===========================================================================
+  # Odoo - Development Config
+  # ===========================================================================
+  odoo:
+    ports:
+      - "8069:8069"
+      - "8072:8072"
+    environment:
+      PASSWORD: devpassword123
+      ODOO_PASSWORD: admin
+      # Development mode
+      DEV_MODE: "True"
+      # More verbose logging
+      LOG_LEVEL: debug
+      # Disable workers for debugging
+      WORKERS: 0
+    volumes:
+      # Mount addons for live development
+      - ../odoo/addons:/mnt/extra-addons/ipai
+
+  # ===========================================================================
+  # Mailhog - Email Testing
+  # ===========================================================================
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: ${COMPOSE_PROJECT_NAME:-ipai}_mailhog
+    restart: unless-stopped
+    ports:
+      - "1025:1025"   # SMTP
+      - "8025:8025"   # Web UI
+    networks:
+      - backend
+
+  # ===========================================================================
+  # Adminer - Database Management
+  # ===========================================================================
+  adminer:
+    image: adminer:latest
+    container_name: ${COMPOSE_PROJECT_NAME:-ipai}_adminer
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    networks:
+      - backend
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+      ADMINER_DESIGN: pepa-linha
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  backend:
+    driver: bridge
+  frontend:
+    driver: bridge

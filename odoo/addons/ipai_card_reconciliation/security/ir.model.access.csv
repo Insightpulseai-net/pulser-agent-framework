@@ -1,0 +1,6 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_card_statement_user,ipai.card.statement.user,model_ipai_card_statement,base.group_user,1,0,0,0
+access_card_statement_manager,ipai.card.statement.manager,model_ipai_card_statement,account.group_account_manager,1,1,1,1
+access_card_transaction_user,ipai.card.transaction.user,model_ipai_card_transaction,base.group_user,1,0,0,0
+access_card_transaction_manager,ipai.card.transaction.manager,model_ipai_card_transaction,account.group_account_manager,1,1,1,1
+access_card_import_wizard,ipai.card.import.wizard,model_ipai_card_import_wizard,account.group_account_manager,1,1,1,1
