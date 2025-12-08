@@ -1,0 +1,300 @@
+{
+  "name": "BIR Form Filing Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "bir-filing",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "name": "Webhook - BIR Filing Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "bir-filing-webhook",
+      "id": "webhook-filing"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "execute",
+        "query": "SELECT \n  b.id,\n  b.tenant_id,\n  b.workspace_id,\n  b.form_type,\n  b.filing_period,\n  b.filing_deadline,\n  b.agency_name,\n  b.employee_name,\n  b.status,\n  b.metadata\nFROM scout.silver_bir_forms b\nWHERE b.id = '{{$json.bir_form_id}}'::uuid;",
+        "additionalFields": {}
+      },
+      "name": "Get BIR Form Details",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "id": "get-form-details",
+      "credentials": {
+        "postgres": {
+          "id": "supabase-postgres",
+          "name": "Supabase PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.status}}",
+              "operation": "equals",
+              "value2": "submitted"
+            }
+          ]
+        }
+      },
+      "name": "Check If Submitted",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [650, 300],
+      "id": "check-submitted"
+    },
+    {
+      "parameters": {
+        "functionCode": "// BIR Form Filing Validator\n// Validates form data before filing\nconst form = items[0].json;\nconst errors = [];\n\n// Required field validation\nif (!form.form_type) errors.push('Missing form_type');\nif (!form.filing_period) errors.push('Missing filing_period');\nif (!form.agency_name) errors.push('Missing agency_name');\nif (!form.employee_name) errors.push('Missing employee_name');\n\n// Date validation\nconst deadline = new Date(form.filing_deadline);\nconst now = new Date();\nif (now > deadline) {\n  errors.push('Filing deadline has passed - form will be marked as late');\n}\n\n// Metadata validation\nconst metadata = form.metadata || {};\nif (!metadata.tin) errors.push('Missing TIN in metadata');\nif (!metadata.amount) errors.push('Missing amount in metadata');\n\n// Determine validation result\nconst isValid = errors.length === 0;\nconst validationResult = {\n  bir_form_id: form.id,\n  is_valid: isValid,\n  errors: errors,\n  validated_at: new Date().toISOString(),\n  form_type: form.form_type,\n  filing_period: form.filing_period,\n  agency_name: form.agency_name,\n  status: errors.includes('Filing deadline has passed') ? 'late' : 'filed'\n};\n\nreturn [{ json: validationResult }];"
+      },
+      "name": "Validate Form Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [850, 250],
+      "id": "validate-form"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.is_valid}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "Check Validation Result",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1050, 250],
+      "id": "check-validation"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "execute",
+        "query": "UPDATE scout.silver_bir_forms\nSET status = '{{$json.status}}',\n    filed_date = CASE WHEN '{{$json.status}}' = 'filed' THEN now() ELSE filed_date END,\n    metadata = jsonb_set(\n      COALESCE(metadata, '{}'::jsonb),\n      '{filing_validation}',\n      to_jsonb(jsonb_build_object(\n        'validated_at', '{{$json.validated_at}}',\n        'is_valid', {{$json.is_valid}},\n        'errors', '{{$json.errors}}'::jsonb\n      ))\n    )\nWHERE id = '{{$json.bir_form_id}}'::uuid;",
+        "additionalFields": {}
+      },
+      "name": "Update BIR Form Status - Filed",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [1250, 200],
+      "id": "update-filed",
+      "credentials": {
+        "postgres": {
+          "id": "supabase-postgres",
+          "name": "Supabase PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "execute",
+        "query": "UPDATE scout.silver_bir_forms\nSET status = 'validation_failed',\n    metadata = jsonb_set(\n      COALESCE(metadata, '{}'::jsonb),\n      '{filing_validation}',\n      to_jsonb(jsonb_build_object(\n        'validated_at', '{{$json.validated_at}}',\n        'is_valid', {{$json.is_valid}},\n        'errors', '{{$json.errors}}'::jsonb\n      ))\n    )\nWHERE id = '{{$json.bir_form_id}}'::uuid;",
+        "additionalFields": {}
+      },
+      "name": "Update BIR Form Status - Validation Failed",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [1250, 300],
+      "id": "update-failed",
+      "credentials": {
+        "postgres": {
+          "id": "supabase-postgres",
+          "name": "Supabase PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://mattermost.insightpulseai.net/hooks/{{$env.MATTERMOST_WEBHOOK_ID}}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "={{\"✅ **BIR Form Filed Successfully**\\n\\n\" +\n\"**Form:** \" + $json.form_type + \"\\n\" +\n\"**Period:** \" + $json.filing_period + \"\\n\" +\n\"**Agency:** \" + $json.agency_name + \"\\n\" +\n\"**Filed At:** \" + new Date().toLocaleString('en-PH') + \"\\n\" +\n\"**Status:** \" + $json.status.toUpperCase()}}"
+            },
+            {
+              "name": "channel",
+              "value": "finance-alerts"
+            },
+            {
+              "name": "username",
+              "value": "BIR Filing Bot"
+            }
+          ]
+        },
+        "options": {
+          "contentType": "application/json"
+        }
+      },
+      "name": "Notify Success",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [1450, 200],
+      "id": "notify-success"
+    },
+    {
+      "parameters": {
+        "url": "https://mattermost.insightpulseai.net/hooks/{{$env.MATTERMOST_WEBHOOK_ID}}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "={{\"❌ **BIR Form Filing Failed**\\n\\n\" +\n\"**Form:** \" + $json.form_type + \"\\n\" +\n\"**Period:** \" + $json.filing_period + \"\\n\" +\n\"**Agency:** \" + $json.agency_name + \"\\n\" +\n\"**Errors:** \" + $json.errors.join(', ') + \"\\n\" +\n\"**Action Required:** Review and resubmit\"}}"
+            },
+            {
+              "name": "channel",
+              "value": "finance-alerts"
+            },
+            {
+              "name": "username",
+              "value": "BIR Filing Bot"
+            }
+          ]
+        },
+        "options": {
+          "contentType": "application/json"
+        }
+      },
+      "name": "Notify Failure",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [1450, 300],
+      "id": "notify-failure"
+    },
+    {
+      "parameters": {},
+      "name": "Form Not Submitted",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [850, 400],
+      "id": "not-submitted"
+    }
+  ],
+  "connections": {
+    "Webhook - BIR Filing Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get BIR Form Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get BIR Form Details": {
+      "main": [
+        [
+          {
+            "node": "Check If Submitted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check If Submitted": {
+      "main": [
+        [
+          {
+            "node": "Validate Form Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Form Not Submitted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Form Data": {
+      "main": [
+        [
+          {
+            "node": "Check Validation Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Validation Result": {
+      "main": [
+        [
+          {
+            "node": "Update BIR Form Status - Filed",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update BIR Form Status - Validation Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update BIR Form Status - Filed": {
+      "main": [
+        [
+          {
+            "node": "Notify Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update BIR Form Status - Validation Failed": {
+      "main": [
+        [
+          {
+            "node": "Notify Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "timezone": "Asia/Manila",
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "BIR",
+      "id": "bir-workflows"
+    },
+    {
+      "name": "Filing",
+      "id": "filing-workflows"
+    }
+  ],
+  "meta": {
+    "instanceId": "ipa-n8n-production"
+  }
+}

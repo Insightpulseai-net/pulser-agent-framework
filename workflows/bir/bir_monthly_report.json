@@ -1,0 +1,257 @@
+{
+  "name": "BIR Monthly Report Generator",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "cronExpression": "0 9 1 * *"
+            }
+          ]
+        }
+      },
+      "name": "Schedule - 1st of Month (9AM)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "id": "monthly-schedule"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Calculate previous month date range\nconst now = new Date();\nconst lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);\nconst lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);\n\nreturn [{\n  json: {\n    start_date: lastMonth.toISOString().split('T')[0],\n    end_date: lastMonthEnd.toISOString().split('T')[0],\n    month_name: lastMonth.toLocaleString('en-US', { month: 'long', year: 'numeric' })\n  }\n}];"
+      },
+      "name": "Calculate Last Month Range",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "id": "calc-month"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "execute",
+        "query": "SELECT \n  form_type,\n  COUNT(*) AS total_forms,\n  COUNT(*) FILTER (WHERE status = 'filed' AND filed_date <= filing_deadline) AS filed_on_time,\n  COUNT(*) FILTER (WHERE status = 'filed' AND filed_date > filing_deadline) AS filed_late,\n  COUNT(*) FILTER (WHERE status IN ('not_started', 'in_progress', 'submitted') AND filing_deadline < CURRENT_TIMESTAMP) AS overdue,\n  COUNT(*) FILTER (WHERE status IN ('not_started', 'in_progress', 'submitted') AND filing_deadline >= CURRENT_TIMESTAMP) AS pending,\n  ROUND(AVG(CASE WHEN status = 'filed' THEN EXTRACT(DAY FROM (filed_date - filing_deadline)) ELSE NULL END), 2) AS avg_filing_delay_days\nFROM scout.silver_bir_forms\nWHERE filing_period LIKE (TO_CHAR('{{$json.start_date}}'::date, 'YYYY-MM') || '%')\nGROUP BY form_type\nORDER BY form_type;",
+        "additionalFields": {}
+      },
+      "name": "Query Monthly Statistics By Form Type",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [650, 300],
+      "id": "query-by-form",
+      "credentials": {
+        "postgres": {
+          "id": "supabase-postgres",
+          "name": "Supabase PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "execute",
+        "query": "SELECT \n  agency_name,\n  COUNT(*) AS total_forms,\n  COUNT(*) FILTER (WHERE status = 'filed' AND filed_date <= filing_deadline) AS filed_on_time,\n  COUNT(*) FILTER (WHERE status = 'filed' AND filed_date > filing_deadline) AS filed_late,\n  COUNT(*) FILTER (WHERE status IN ('not_started', 'in_progress', 'submitted') AND filing_deadline < CURRENT_TIMESTAMP) AS overdue,\n  ROUND(COUNT(*) FILTER (WHERE status = 'filed' AND filed_date <= filing_deadline)::numeric / NULLIF(COUNT(*), 0) * 100, 2) AS compliance_rate\nFROM scout.silver_bir_forms\nWHERE filing_period LIKE (TO_CHAR('{{$json.start_date}}'::date, 'YYYY-MM') || '%')\nGROUP BY agency_name\nORDER BY compliance_rate ASC;",
+        "additionalFields": {}
+      },
+      "name": "Query Monthly Statistics By Agency",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [850, 300],
+      "id": "query-by-agency",
+      "credentials": {
+        "postgres": {
+          "id": "supabase-postgres",
+          "name": "Supabase PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "execute",
+        "query": "SELECT \n  employee_name,\n  COUNT(*) AS forms_handled,\n  COUNT(*) FILTER (WHERE status = 'filed') AS completed,\n  COUNT(*) FILTER (WHERE status IN ('not_started', 'in_progress', 'submitted') AND filing_deadline < CURRENT_TIMESTAMP) AS overdue_forms,\n  ROUND(AVG(CASE WHEN status = 'filed' THEN EXTRACT(DAY FROM (filed_date - filing_deadline)) ELSE NULL END), 2) AS avg_filing_delay\nFROM scout.silver_bir_forms\nWHERE filing_period LIKE (TO_CHAR('{{$json.start_date}}'::date, 'YYYY-MM') || '%')\nGROUP BY employee_name\nORDER BY overdue_forms DESC, avg_filing_delay DESC;",
+        "additionalFields": {}
+      },
+      "name": "Query Employee Performance",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [1050, 300],
+      "id": "query-employees",
+      "credentials": {
+        "postgres": {
+          "id": "supabase-postgres",
+          "name": "Supabase PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// Monthly BIR Report Builder\nconst monthInfo = items[0].json;\nconst byFormType = items[1].json;\nconst byAgency = items[2].json;\nconst byEmployee = items[3].json;\n\n// Calculate overall statistics\nconst overallStats = {\n  total_forms: byFormType.reduce((sum, f) => sum + f.total_forms, 0),\n  filed_on_time: byFormType.reduce((sum, f) => sum + f.filed_on_time, 0),\n  filed_late: byFormType.reduce((sum, f) => sum + f.filed_late, 0),\n  overdue: byFormType.reduce((sum, f) => sum + f.overdue, 0),\n  pending: byFormType.reduce((sum, f) => sum + f.pending, 0)\n};\n\noverallStats.compliance_rate = overallStats.total_forms > 0\n  ? Math.round((overallStats.filed_on_time / overallStats.total_forms) * 100 * 100) / 100\n  : 0;\n\n// Build monthly report\nconst report = {\n  report_month: monthInfo.month_name,\n  report_generated: new Date().toISOString(),\n  date_range: {\n    start: monthInfo.start_date,\n    end: monthInfo.end_date\n  },\n  overall_statistics: overallStats,\n  by_form_type: byFormType,\n  by_agency: byAgency,\n  employee_performance: byEmployee,\n  top_performers: byEmployee\n    .filter(e => e.overdue_forms === 0)\n    .slice(0, 5),\n  attention_needed: byAgency\n    .filter(a => a.compliance_rate < 85)\n    .slice(0, 5),\n  summary: {\n    compliance_status: (\n      overallStats.compliance_rate >= 95 ? 'Excellent' :\n      overallStats.compliance_rate >= 85 ? 'Good' :\n      overallStats.compliance_rate >= 75 ? 'Acceptable' :\n      'Needs Improvement'\n    ),\n    key_findings: []\n  }\n};\n\n// Generate key findings\nif (overallStats.overdue > 0) {\n  report.summary.key_findings.push(`${overallStats.overdue} forms overdue`);\n}\nif (overallStats.filed_late > 0) {\n  report.summary.key_findings.push(`${overallStats.filed_late} forms filed late`);\n}\nif (report.attention_needed.length > 0) {\n  report.summary.key_findings.push(`${report.attention_needed.length} agencies need attention`);\n}\n\nreturn [{ json: report }];"
+      },
+      "name": "Build Monthly Report",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1250, 300],
+      "id": "build-report"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "table": "scout.platinum_analytics_insights",
+        "columns": "tenant_id,workspace_id,insight_type,insight_title,insight_text,source_view,embedding,model,metadata",
+        "values": {
+          "tenant_id": "={{$env.TENANT_ID}}",
+          "workspace_id": "={{$env.WORKSPACE_ID}}",
+          "insight_type": "bir_monthly_report",
+          "insight_title": "={{\"BIR Monthly Report - \" + $json.report_month}}",
+          "insight_text": "={{JSON.stringify($json.summary)}}",
+          "source_view": "scout.silver_bir_forms",
+          "embedding": null,
+          "model": "manual",
+          "metadata": "={{JSON.stringify($json)}}"
+        },
+        "additionalFields": {}
+      },
+      "name": "Store Report in Platinum",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [1450, 300],
+      "id": "store-report",
+      "credentials": {
+        "postgres": {
+          "id": "supabase-postgres",
+          "name": "Supabase PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://mattermost.insightpulseai.net/hooks/{{$env.MATTERMOST_WEBHOOK_ID}}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "={{\"📊 **BIR Monthly Report - \" + $json.report_month + \"**\\n\\n\" +\n\"**Overall Compliance Rate:** \" + $json.overall_statistics.compliance_rate + \"% (\" + $json.summary.compliance_status + \")\\n\" +\n\"**Total Forms:** \" + $json.overall_statistics.total_forms + \"\\n\" +\n\"**Filed On Time:** \" + $json.overall_statistics.filed_on_time + \"\\n\" +\n\"**Filed Late:** \" + $json.overall_statistics.filed_late + \"\\n\" +\n\"**Overdue:** \" + $json.overall_statistics.overdue + \"\\n\\n\" +\n\"**Key Findings:**\\n\" +\n$json.summary.key_findings.map(f => \"- \" + f).join('\\n') + \"\\n\\n\" +\n\"**Top Performers:** \" + $json.top_performers.length + \"\\n\" +\n\"**Agencies Needing Attention:** \" + $json.attention_needed.length}}"
+            },
+            {
+              "name": "channel",
+              "value": "finance-reports"
+            },
+            {
+              "name": "username",
+              "value": "BIR Reporting Bot"
+            }
+          ]
+        },
+        "options": {
+          "contentType": "application/json"
+        }
+      },
+      "name": "Post Report to Mattermost",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [1650, 300],
+      "id": "post-report"
+    }
+  ],
+  "connections": {
+    "Schedule - 1st of Month (9AM)": {
+      "main": [
+        [
+          {
+            "node": "Calculate Last Month Range",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Last Month Range": {
+      "main": [
+        [
+          {
+            "node": "Query Monthly Statistics By Form Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Monthly Statistics By Form Type": {
+      "main": [
+        [
+          {
+            "node": "Query Monthly Statistics By Agency",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Monthly Statistics By Agency": {
+      "main": [
+        [
+          {
+            "node": "Query Employee Performance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Employee Performance": {
+      "main": [
+        [
+          {
+            "node": "Build Monthly Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Monthly Report": {
+      "main": [
+        [
+          {
+            "node": "Store Report in Platinum",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Report in Platinum": {
+      "main": [
+        [
+          {
+            "node": "Post Report to Mattermost",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "timezone": "Asia/Manila",
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "BIR",
+      "id": "bir-workflows"
+    },
+    {
+      "name": "Reporting",
+      "id": "reporting-workflows"
+    }
+  ],
+  "meta": {
+    "instanceId": "ipa-n8n-production"
+  }
+}

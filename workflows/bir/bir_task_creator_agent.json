@@ -1,0 +1,197 @@
+{
+  "name": "BIR Task Creator Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "cronExpression": "0 8 * * *"
+            }
+          ]
+        }
+      },
+      "name": "Schedule - Daily 8AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "id": "task-creator-schedule"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "execute",
+        "query": "SELECT \n  b.id,\n  b.tenant_id,\n  b.workspace_id,\n  b.form_type,\n  b.filing_period,\n  b.filing_deadline,\n  b.agency_name,\n  b.employee_name,\n  -- Calculate internal deadlines\n  (b.filing_deadline - INTERVAL '4 days') AS prep_deadline,\n  (b.filing_deadline - INTERVAL '2 days') AS review_deadline,\n  (b.filing_deadline - INTERVAL '1 day') AS approval_deadline\nFROM scout.silver_bir_forms b\nLEFT JOIN scout.silver_ppm_tasks t ON t.bir_schedule_id = b.id::text\nWHERE b.status = 'not_started'\n  AND t.id IS NULL\n  AND b.filing_deadline > CURRENT_TIMESTAMP\nORDER BY b.filing_deadline ASC;",
+        "additionalFields": {}
+      },
+      "name": "Query BIR Forms Needing Tasks",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "id": "query-bir-forms",
+      "credentials": {
+        "postgres": {
+          "id": "supabase-postgres",
+          "name": "Supabase PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// BIR Task Creator Agent - Creates 3 tasks per BIR form\nconst forms = items[0].json;\nconst allTasks = [];\n\nfor (const form of forms) {\n  const birFormId = form.id;\n  const formType = form.form_type;\n  const filingPeriod = form.filing_period;\n  const agencyName = form.agency_name;\n  const employeeName = form.employee_name;\n  \n  // Task 1: Preparation (Finance Supervisor)\n  allTasks.push({\n    tenant_id: form.tenant_id,\n    workspace_id: form.workspace_id,\n    task_name: `BIR ${formType} Preparation - ${agencyName} (${filingPeriod})`,\n    task_type: 'bir_preparation',\n    priority: 'high',\n    due_date: form.prep_deadline,\n    logframe_level: 'IM2',\n    logframe_id: null,\n    assigned_to: employeeName,\n    responsible_role: 'Finance Supervisor',\n    status: 'not_started',\n    progress_pct: 0.00,\n    bir_schedule_id: birFormId,\n    bronze_id: null,\n    metadata: {\n      form_type: formType,\n      filing_period: filingPeriod,\n      agency_name: agencyName,\n      task_sequence: 1,\n      task_phase: 'preparation'\n    }\n  });\n  \n  // Task 2: Review (Senior Finance Manager)\n  allTasks.push({\n    tenant_id: form.tenant_id,\n    workspace_id: form.workspace_id,\n    task_name: `BIR ${formType} Review - ${agencyName} (${filingPeriod})`,\n    task_type: 'bir_review',\n    priority: 'high',\n    due_date: form.review_deadline,\n    logframe_level: 'IM2',\n    logframe_id: null,\n    assigned_to: 'Senior Finance Manager',\n    responsible_role: 'Senior Finance Manager',\n    status: 'not_started',\n    progress_pct: 0.00,\n    bir_schedule_id: birFormId,\n    bronze_id: null,\n    metadata: {\n      form_type: formType,\n      filing_period: filingPeriod,\n      agency_name: agencyName,\n      task_sequence: 2,\n      task_phase: 'review'\n    }\n  });\n  \n  // Task 3: Approval (Finance Director)\n  allTasks.push({\n    tenant_id: form.tenant_id,\n    workspace_id: form.workspace_id,\n    task_name: `BIR ${formType} Approval - ${agencyName} (${filingPeriod})`,\n    task_type: 'bir_approval',\n    priority: 'high',\n    due_date: form.approval_deadline,\n    logframe_level: 'IM2',\n    logframe_id: null,\n    assigned_to: 'Finance Director',\n    responsible_role: 'Finance Director',\n    status: 'not_started',\n    progress_pct: 0.00,\n    bir_schedule_id: birFormId,\n    bronze_id: null,\n    metadata: {\n      form_type: formType,\n      filing_period: filingPeriod,\n      agency_name: agencyName,\n      task_sequence: 3,\n      task_phase: 'approval'\n    }\n  });\n}\n\nreturn allTasks.map(task => ({ json: task }));"
+      },
+      "name": "Create 3 Tasks Per BIR Form",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [650, 300],
+      "id": "create-tasks"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "table": "scout.silver_ppm_tasks",
+        "columns": "tenant_id,workspace_id,task_name,task_type,priority,due_date,logframe_level,assigned_to,responsible_role,status,progress_pct,bir_schedule_id,metadata",
+        "additionalFields": {
+          "returnFields": "id,task_name,due_date"
+        }
+      },
+      "name": "Insert Tasks to Silver Layer",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [850, 300],
+      "id": "insert-tasks",
+      "credentials": {
+        "postgres": {
+          "id": "supabase-postgres",
+          "name": "Supabase PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://mattermost.insightpulseai.net/hooks/{{$env.MATTERMOST_WEBHOOK_ID}}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "={{\"✅ **BIR Tasks Created**\\n\\n\" +\n\"**Task:** \" + $json.task_name + \"\\n\" +\n\"**Due Date:** \" + new Date($json.due_date).toLocaleDateString('en-PH') + \"\\n\" +\n\"**Assigned To:** \" + $json.responsible_role + \"\\n\" +\n\"**Task ID:** \" + $json.id}}"
+            },
+            {
+              "name": "channel",
+              "value": "finance-tasks"
+            },
+            {
+              "name": "username",
+              "value": "BIR Task Bot"
+            }
+          ]
+        },
+        "options": {
+          "contentType": "application/json"
+        }
+      },
+      "name": "Notify Task Created",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [1050, 300],
+      "id": "notify-task-created"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "execute",
+        "query": "UPDATE scout.silver_bir_forms\nSET status = 'in_progress',\n    metadata = jsonb_set(\n      COALESCE(metadata, '{}'::jsonb),\n      '{tasks_created_at}',\n      to_jsonb(now())\n    )\nWHERE id = '{{$json.bir_schedule_id}}'::uuid;",
+        "additionalFields": {}
+      },
+      "name": "Update BIR Form Status",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [1250, 300],
+      "id": "update-bir-status",
+      "credentials": {
+        "postgres": {
+          "id": "supabase-postgres",
+          "name": "Supabase PostgreSQL"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule - Daily 8AM": {
+      "main": [
+        [
+          {
+            "node": "Query BIR Forms Needing Tasks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query BIR Forms Needing Tasks": {
+      "main": [
+        [
+          {
+            "node": "Create 3 Tasks Per BIR Form",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create 3 Tasks Per BIR Form": {
+      "main": [
+        [
+          {
+            "node": "Insert Tasks to Silver Layer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Tasks to Silver Layer": {
+      "main": [
+        [
+          {
+            "node": "Notify Task Created",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Task Created": {
+      "main": [
+        [
+          {
+            "node": "Update BIR Form Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "timezone": "Asia/Manila",
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "BIR",
+      "id": "bir-workflows"
+    },
+    {
+      "name": "Automation",
+      "id": "automation-workflows"
+    }
+  ],
+  "meta": {
+    "instanceId": "ipa-n8n-production"
+  }
+}

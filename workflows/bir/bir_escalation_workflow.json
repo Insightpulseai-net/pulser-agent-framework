@@ -1,0 +1,250 @@
+{
+  "name": "BIR Escalation Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 12
+            }
+          ]
+        }
+      },
+      "name": "Schedule - Twice Daily (8AM, 8PM)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "id": "escalation-schedule"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "execute",
+        "query": "SELECT \n  b.id,\n  b.tenant_id,\n  b.workspace_id,\n  b.form_type,\n  b.filing_period,\n  b.filing_deadline,\n  b.agency_name,\n  b.employee_name,\n  b.status,\n  b.metadata,\n  EXTRACT(DAY FROM (CURRENT_TIMESTAMP - b.filing_deadline)) AS days_overdue,\n  CASE\n    WHEN EXTRACT(DAY FROM (CURRENT_TIMESTAMP - b.filing_deadline)) >= 7 THEN 'critical'\n    WHEN EXTRACT(DAY FROM (CURRENT_TIMESTAMP - b.filing_deadline)) >= 3 THEN 'high'\n    WHEN EXTRACT(DAY FROM (CURRENT_TIMESTAMP - b.filing_deadline)) >= 1 THEN 'medium'\n    ELSE 'low'\n  END AS escalation_level\nFROM scout.silver_bir_forms b\nWHERE b.status IN ('not_started', 'in_progress', 'submitted')\n  AND b.filing_deadline < CURRENT_TIMESTAMP\nORDER BY b.filing_deadline ASC;",
+        "additionalFields": {}
+      },
+      "name": "Query Overdue BIR Forms",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "id": "query-overdue",
+      "credentials": {
+        "postgres": {
+          "id": "supabase-postgres",
+          "name": "Supabase PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json[\"count\"]}}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "name": "Check If Any Overdue",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [650, 300],
+      "id": "check-overdue"
+    },
+    {
+      "parameters": {
+        "functionCode": "// BIR Escalation Logic\n// Determines escalation targets based on overdue severity\nconst forms = items[0].json;\nconst escalations = [];\n\nfor (const form of forms) {\n  const daysOverdue = form.days_overdue;\n  const escalationLevel = form.escalation_level;\n  \n  // Determine escalation target\n  let escalateTo = '';\n  let escalationAction = '';\n  \n  if (escalationLevel === 'critical') {\n    // 7+ days overdue → Finance Director + CFO\n    escalateTo = 'Finance Director, CFO';\n    escalationAction = 'Immediate action required - regulatory penalties imminent';\n  } else if (escalationLevel === 'high') {\n    // 3-6 days overdue → Senior Finance Manager + Finance Director\n    escalateTo = 'Senior Finance Manager, Finance Director';\n    escalationAction = 'Urgent - deadline missed, file immediately';\n  } else if (escalationLevel === 'medium') {\n    // 1-2 days overdue → Finance Supervisor + Senior Finance Manager\n    escalateTo = 'Finance Supervisor, Senior Finance Manager';\n    escalationAction = 'Priority - complete and submit today';\n  } else {\n    // <1 day overdue → Finance Supervisor\n    escalateTo = 'Finance Supervisor';\n    escalationAction = 'Attention needed - deadline passed';\n  }\n  \n  escalations.push({\n    bir_form_id: form.id,\n    form_type: form.form_type,\n    filing_period: form.filing_period,\n    agency_name: form.agency_name,\n    employee_name: form.employee_name,\n    filing_deadline: form.filing_deadline,\n    days_overdue: daysOverdue,\n    escalation_level: escalationLevel,\n    escalate_to: escalateTo,\n    escalation_action: escalationAction,\n    escalated_at: new Date().toISOString()\n  });\n}\n\nreturn escalations.map(e => ({ json: e }));"
+      },
+      "name": "Determine Escalation Targets",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [850, 250],
+      "id": "determine-escalation"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "execute",
+        "query": "UPDATE scout.silver_bir_forms\nSET status = 'overdue',\n    metadata = jsonb_set(\n      COALESCE(metadata, '{}'::jsonb),\n      '{escalations}',\n      COALESCE(metadata->'escalations', '[]'::jsonb) || to_jsonb(jsonb_build_object(\n        'escalated_at', '{{$json.escalated_at}}',\n        'escalation_level', '{{$json.escalation_level}}',\n        'escalate_to', '{{$json.escalate_to}}',\n        'days_overdue', {{$json.days_overdue}}\n      ))\n    )\nWHERE id = '{{$json.bir_form_id}}'::uuid;",
+        "additionalFields": {}
+      },
+      "name": "Update Form Status - Overdue",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [1050, 250],
+      "id": "update-overdue",
+      "credentials": {
+        "postgres": {
+          "id": "supabase-postgres",
+          "name": "Supabase PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://mattermost.insightpulseai.net/hooks/{{$env.MATTERMOST_WEBHOOK_ID}}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "={{($json.escalation_level === 'critical' ? '🚨🚨🚨' : $json.escalation_level === 'high' ? '🚨🚨' : '🚨') + \" **BIR ESCALATION - \" + $json.escalation_level.toUpperCase() + \"**\\n\\n\" +\n\"**Form:** \" + $json.form_type + \"\\n\" +\n\"**Period:** \" + $json.filing_period + \"\\n\" +\n\"**Agency:** \" + $json.agency_name + \"\\n\" +\n\"**Employee:** \" + $json.employee_name + \"\\n\" +\n\"**Deadline:** \" + new Date($json.filing_deadline).toLocaleDateString('en-PH') + \"\\n\" +\n\"**Days Overdue:** \" + $json.days_overdue + \" days\\n\\n\" +\n\"**Escalated To:** \" + $json.escalate_to + \"\\n\" +\n\"**Action Required:** \" + $json.escalation_action}}"
+            },
+            {
+              "name": "channel",
+              "value": "finance-escalations"
+            },
+            {
+              "name": "username",
+              "value": "BIR Escalation Bot"
+            }
+          ]
+        },
+        "options": {
+          "contentType": "application/json"
+        }
+      },
+      "name": "Send Escalation Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [1250, 250],
+      "id": "send-escalation"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "table": "scout.platinum_analytics_insights",
+        "columns": "tenant_id,workspace_id,insight_type,insight_title,insight_text,source_view,embedding,model,metadata",
+        "values": {
+          "tenant_id": "={{$json.tenant_id}}",
+          "workspace_id": "={{$json.workspace_id}}",
+          "insight_type": "bir_escalation",
+          "insight_title": "={{\"BIR Escalation: \" + $json.form_type + \" - \" + $json.filing_period}}",
+          "insight_text": "={{$json.form_type + \" for \" + $json.agency_name + \" is \" + $json.days_overdue + \" days overdue. Escalated to \" + $json.escalate_to + \". \" + $json.escalation_action}}",
+          "source_view": "scout.silver_bir_forms",
+          "embedding": null,
+          "model": "manual",
+          "metadata": "={{JSON.stringify($json)}}"
+        },
+        "additionalFields": {}
+      },
+      "name": "Store Escalation in Platinum",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [1450, 250],
+      "id": "store-escalation",
+      "credentials": {
+        "postgres": {
+          "id": "supabase-postgres",
+          "name": "Supabase PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "name": "No Overdue Forms",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [850, 400],
+      "id": "no-overdue"
+    }
+  ],
+  "connections": {
+    "Schedule - Twice Daily (8AM, 8PM)": {
+      "main": [
+        [
+          {
+            "node": "Query Overdue BIR Forms",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Overdue BIR Forms": {
+      "main": [
+        [
+          {
+            "node": "Check If Any Overdue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check If Any Overdue": {
+      "main": [
+        [
+          {
+            "node": "Determine Escalation Targets",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Overdue Forms",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Determine Escalation Targets": {
+      "main": [
+        [
+          {
+            "node": "Update Form Status - Overdue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Form Status - Overdue": {
+      "main": [
+        [
+          {
+            "node": "Send Escalation Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Escalation Alert": {
+      "main": [
+        [
+          {
+            "node": "Store Escalation in Platinum",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "timezone": "Asia/Manila",
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "BIR",
+      "id": "bir-workflows"
+    },
+    {
+      "name": "Escalation",
+      "id": "escalation-workflows"
+    }
+  ],
+  "meta": {
+    "instanceId": "ipa-n8n-production"
+  }
+}
