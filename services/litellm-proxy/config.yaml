@@ -1,0 +1,134 @@
+# LiteLLM Gateway Configuration for AI Workbench
+# Multi-model routing with fallbacks, rate limiting, and cost tracking
+# Docs: https://docs.litellm.ai/docs/proxy/configs
+
+model_list:
+  # Claude Sonnet 4.5 (Primary)
+  - model_name: claude-sonnet-4.5
+    litellm_params:
+      model: claude-3-5-sonnet-20241022
+      api_key: os.environ/ANTHROPIC_API_KEY
+      api_base: https://api.anthropic.com
+      rpm: 500 # Requests per minute
+      tpm: 100000 # Tokens per minute
+      max_parallel_requests: 50
+    model_info:
+      mode: chat
+      supports_function_calling: true
+      supports_vision: true
+      input_cost_per_token: 0.000003 # $3/1M tokens
+      output_cost_per_token: 0.000015 # $15/1M tokens
+
+  # GPT-4o-mini (Fallback 1)
+  - model_name: gpt-4o-mini
+    litellm_params:
+      model: gpt-4o-mini
+      api_key: os.environ/OPENAI_API_KEY
+      api_base: https://api.openai.com/v1
+      rpm: 500
+      tpm: 200000
+    model_info:
+      mode: chat
+      supports_function_calling: true
+      supports_vision: true
+      input_cost_per_token: 0.00000015 # $0.15/1M tokens
+      output_cost_per_token: 0.0000006 # $0.60/1M tokens
+
+  # Gemini 1.5 Flash (Fallback 2)
+  - model_name: gemini-1.5-flash
+    litellm_params:
+      model: gemini/gemini-1.5-flash
+      api_key: os.environ/GOOGLE_API_KEY
+      rpm: 1000
+      tpm: 1000000
+    model_info:
+      mode: chat
+      supports_function_calling: true
+      input_cost_per_token: 0.000000075 # $0.075/1M tokens
+      output_cost_per_token: 0.0000003 # $0.30/1M tokens
+
+  # GPT-3.5 Turbo (Budget option)
+  - model_name: gpt-3.5-turbo
+    litellm_params:
+      model: gpt-3.5-turbo
+      api_key: os.environ/OPENAI_API_KEY
+      rpm: 1000
+      tpm: 500000
+    model_info:
+      mode: chat
+      supports_function_calling: true
+      input_cost_per_token: 0.0000005 # $0.50/1M tokens
+      output_cost_per_token: 0.0000015 # $1.50/1M tokens
+
+# Router settings
+router_settings:
+  routing_strategy: latency-based-routing # Use fastest model
+  routing_strategy_args:
+    ttl: 60 # Cache latency for 60s
+
+  fallbacks:
+    - claude-sonnet-4.5: [gpt-4o-mini, gemini-1.5-flash]
+    - gpt-4o-mini: [gemini-1.5-flash, gpt-3.5-turbo]
+
+  allowed_fails: 3 # Switch to fallback after 3 failures
+  cooldown_time: 30 # 30s cooldown before retrying failed model
+
+# General settings
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+
+  # Database for tracking (optional PostgreSQL)
+  database_url: os.environ/LITELLM_DATABASE_URL
+
+  # Langfuse integration
+  success_callback: ["langfuse"]
+  langfuse_public_key: os.environ/LANGFUSE_PUBLIC_KEY
+  langfuse_secret_key: os.environ/LANGFUSE_SECRET_KEY
+  langfuse_host: https://langfuse.insightpulseai.net
+
+  # Alerting
+  alerting: ["slack"]
+  alerting_threshold: 100 # Alert after 100 consecutive errors
+  slack_webhook_url: os.environ/SLACK_WEBHOOK_URL
+
+  # Logging
+  set_verbose: true
+  json_logs: true
+
+# Rate limiting (per user/API key)
+litellm_settings:
+  max_parallel_requests: 100
+  global_max_parallel_requests: 500
+
+  # Per-user limits
+  rpm: 100 # 100 requests per minute per user
+  tpm: 10000 # 10K tokens per minute per user
+
+  # Budget limits
+  max_budget: 100 # $100 per user per day
+  budget_duration: 24h
+
+# Load balancing
+load_balancing_settings:
+  enable: true
+  routing_algorithm: least-busy # Route to least busy model
+
+# Caching (reduce costs for repeated queries)
+cache_settings:
+  type: redis
+  host: os.environ/REDIS_HOST
+  port: os.environ/REDIS_PORT
+  password: os.environ/REDIS_PASSWORD
+  ttl: 3600 # 1 hour cache
+
+# Health check endpoints
+health_check:
+  enabled: true
+  port: 8080
+  endpoint: /health
+
+# Prometheus metrics
+prometheus:
+  enabled: true
+  port: 9090
+  endpoint: /metrics

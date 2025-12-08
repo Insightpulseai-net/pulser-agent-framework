@@ -1,0 +1,162 @@
+# Traefik Helm Chart Values for AI Workbench
+# Ingress controller with Let's Encrypt SSL
+# Chart: https://github.com/traefik/traefik-helm-chart
+
+# Deployment settings
+deployment:
+  replicas: 2
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9100"
+
+# Service configuration
+service:
+  type: LoadBalancer
+  annotations:
+    service.beta.kubernetes.io/do-loadbalancer-name: "ai-workbench-lb"
+    service.beta.kubernetes.io/do-loadbalancer-protocol: "http"
+    service.beta.kubernetes.io/do-loadbalancer-healthcheck-path: "/ping"
+    service.beta.kubernetes.io/do-loadbalancer-healthcheck-protocol: "http"
+
+# Ports
+ports:
+  web:
+    port: 80
+    expose: true
+    exposedPort: 80
+    protocol: TCP
+    redirectTo:
+      port: websecure
+      priority: 10
+
+  websecure:
+    port: 443
+    expose: true
+    exposedPort: 443
+    protocol: TCP
+    tls:
+      enabled: true
+      certResolver: letsencrypt
+
+  metrics:
+    port: 9100
+    expose: false
+    protocol: TCP
+
+# Let's Encrypt configuration
+additionalArguments:
+  - "--certificatesresolvers.letsencrypt.acme.email=admin@insightpulseai.net"
+  - "--certificatesresolvers.letsencrypt.acme.storage=/data/acme.json"
+  - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
+  - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+  - "--metrics.prometheus=true"
+  - "--accesslog=true"
+  - "--log.level=INFO"
+
+# Persistence for Let's Encrypt certs
+persistence:
+  enabled: true
+  storageClass: do-block-storage
+  accessMode: ReadWriteOnce
+  size: 1Gi
+  path: /data
+
+# Resources
+resources:
+  requests:
+    memory: "256Mi"
+    cpu: "250m"
+  limits:
+    memory: "512Mi"
+    cpu: "1000m"
+
+# Autoscaling
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+
+# Health checks
+livenessProbe:
+  httpGet:
+    path: /ping
+    port: 9000
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 2
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /ping
+    port: 9000
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 2
+  failureThreshold: 1
+
+# Global redirects (HTTP → HTTPS)
+globalArguments:
+  - "--global.checknewversion"
+  - "--global.sendanonymoususage=false"
+
+# Logs
+logs:
+  general:
+    level: INFO
+  access:
+    enabled: true
+    filters:
+      statuscodes: "400-599"
+      retryattempts: true
+      minduration: "10ms"
+
+# Providers
+providers:
+  kubernetesCRD:
+    enabled: true
+    allowCrossNamespace: true
+  kubernetesIngress:
+    enabled: true
+    allowExternalNameServices: true
+    publishedService:
+      enabled: true
+
+# Metrics
+metrics:
+  prometheus:
+    enabled: true
+    addEntryPointsLabels: true
+    addServicesLabels: true
+    entryPoint: metrics
+
+# Pilot (Traefik Cloud - optional)
+pilot:
+  enabled: false
+
+# Affinity
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      podAffinityTerm:
+        labelSelector:
+          matchExpressions:
+          - key: app.kubernetes.io/name
+            operator: In
+            values:
+            - traefik
+        topologyKey: kubernetes.io/hostname

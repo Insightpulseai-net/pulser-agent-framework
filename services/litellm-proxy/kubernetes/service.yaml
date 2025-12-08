@@ -1,0 +1,49 @@
+# LiteLLM Gateway Kubernetes Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: litellm-gateway
+  namespace: litellm
+  labels:
+    app: litellm-gateway
+spec:
+  type: ClusterIP
+  selector:
+    app: litellm-gateway
+  ports:
+  - name: http
+    protocol: TCP
+    port: 8080
+    targetPort: 8080
+  - name: metrics
+    protocol: TCP
+    port: 9090
+    targetPort: 9090
+---
+# Ingress for external access via Traefik
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: litellm-ingress
+  namespace: litellm
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: traefik
+  tls:
+  - hosts:
+    - litellm.insightpulseai.net
+    secretName: litellm-tls
+  rules:
+  - host: litellm.insightpulseai.net
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: litellm-gateway
+            port:
+              number: 8080

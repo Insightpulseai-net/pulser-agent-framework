@@ -1,0 +1,141 @@
+# n8n Helm Chart Values for AI Workbench
+# Workflow automation for pipelines and agent triggers
+# Chart: https://github.com/8gears/n8n-helm-chart
+
+# Deployment settings
+replicaCount: 2
+
+image:
+  repository: n8nio/n8n
+  tag: "1.60.0"
+  pullPolicy: IfNotPresent
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 5678
+  annotations: {}
+
+# Ingress configuration
+ingress:
+  enabled: true
+  className: traefik
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: n8n.insightpulseai.net
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: n8n-tls
+      hosts:
+        - n8n.insightpulseai.net
+
+# Persistence for workflows
+persistence:
+  enabled: true
+  storageClass: do-block-storage
+  accessMode: ReadWriteOnce
+  size: 10Gi
+
+# PostgreSQL database for n8n metadata
+postgresql:
+  enabled: true
+  auth:
+    username: n8n
+    password: "" # Set via secret
+    database: n8n
+  primary:
+    persistence:
+      enabled: true
+      size: 5Gi
+
+# n8n configuration
+config:
+  # Basic settings
+  N8N_PROTOCOL: https
+  N8N_HOST: n8n.insightpulseai.net
+  N8N_PORT: "5678"
+  N8N_EDITOR_BASE_URL: https://n8n.insightpulseai.net
+
+  # Security
+  N8N_BASIC_AUTH_ACTIVE: "true"
+  N8N_BASIC_AUTH_USER: admin
+  N8N_BASIC_AUTH_PASSWORD: "" # Set via secret
+
+  # Webhooks
+  WEBHOOK_URL: https://n8n.insightpulseai.net
+  N8N_PAYLOAD_SIZE_MAX: "16"
+
+  # Execution
+  EXECUTIONS_MODE: queue
+  EXECUTIONS_TIMEOUT: "300"
+  EXECUTIONS_TIMEOUT_MAX: "3600"
+  N8N_METRICS: "true"
+  N8N_METRICS_PREFIX: "n8n_"
+
+  # Queue (Redis)
+  QUEUE_BULL_REDIS_HOST: redis-service.n8n.svc.cluster.local
+  QUEUE_BULL_REDIS_PORT: "6379"
+
+  # Timezone
+  GENERIC_TIMEZONE: Asia/Manila
+
+  # Version notifications
+  N8N_VERSION_NOTIFICATIONS_ENABLED: "true"
+
+# Resources
+resources:
+  requests:
+    memory: "512Mi"
+    cpu: "500m"
+  limits:
+    memory: "2Gi"
+    cpu: "2000m"
+
+# Health checks
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 5678
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: 5678
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+# Node affinity
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      podAffinityTerm:
+        labelSelector:
+          matchExpressions:
+          - key: app
+            operator: In
+            values:
+            - n8n
+        topologyKey: kubernetes.io/hostname
+
+# Redis for queue management
+redis:
+  enabled: true
+  architecture: standalone
+  auth:
+    enabled: false
+  master:
+    persistence:
+      enabled: true
+      size: 2Gi
