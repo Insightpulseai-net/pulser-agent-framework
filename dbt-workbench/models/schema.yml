@@ -1,0 +1,192 @@
+version: 2
+
+models:
+  # Bronze Layer Models
+  - name: bronze_transactions
+    description: "Raw Scout transaction data - unvalidated"
+    columns:
+      - name: id
+        description: "Unique identifier for bronze record"
+        tests:
+          - unique
+          - not_null
+      - name: raw_data
+        description: "JSONB blob with transaction data"
+        tests:
+          - not_null
+      - name: ingested_at
+        description: "Ingestion timestamp"
+        tests:
+          - not_null
+
+  - name: bronze_products
+    description: "Raw Scout product catalog data"
+    columns:
+      - name: id
+        description: "Unique identifier for bronze record"
+        tests:
+          - unique
+          - not_null
+
+  # Silver Layer Models
+  - name: silver_validated_transactions
+    description: "Validated and cleaned Scout transactions"
+    tests:
+      - dbt_utils.expression_is_true:
+          expression: "amount > 0"
+          config:
+            severity: error
+            error_if: ">100"
+      - dbt_utils.recency:
+          datepart: day
+          field: validated_at
+          interval: 1
+          config:
+            severity: warn
+    columns:
+      - name: id
+        description: "Unique transaction identifier"
+        tests:
+          - unique
+          - not_null
+      - name: transaction_id
+        description: "Source transaction ID"
+        tests:
+          - unique
+      - name: transaction_date
+        description: "Transaction date"
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "<= CURRENT_DATE"
+      - name: amount
+        description: "Transaction amount"
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "> 0"
+      - name: category
+        description: "Transaction category"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Travel', 'Meals', 'Supplies', 'Equipment', 'Services', 'Utilities', 'Other', 'Uncategorized']
+              quote: false
+      - name: vendor_name
+        description: "Vendor name"
+        tests:
+          - not_null
+      - name: validated_at
+        description: "Validation timestamp"
+        tests:
+          - not_null
+
+  - name: silver_products
+    description: "Validated Scout product catalog"
+    columns:
+      - name: id
+        description: "Unique product identifier"
+        tests:
+          - unique
+          - not_null
+      - name: sku
+        description: "Product SKU"
+        tests:
+          - unique
+          - not_null
+      - name: name
+        description: "Product name"
+        tests:
+          - not_null
+      - name: price
+        description: "Product price"
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+
+  # Gold Layer Models
+  - name: gold_monthly_summary
+    description: "Monthly transaction summary by category"
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - month
+            - category
+    columns:
+      - name: id
+        description: "Unique summary identifier"
+        tests:
+          - unique
+          - not_null
+      - name: month
+        description: "Month of aggregation"
+        tests:
+          - not_null
+      - name: category
+        description: "Transaction category"
+        tests:
+          - not_null
+      - name: total_amount
+        description: "Total amount for month/category"
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "> 0"
+      - name: transaction_count
+        description: "Number of transactions"
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "> 0"
+
+  - name: gold_category_trends
+    description: "Weekly category trend analysis"
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - week
+            - category
+    columns:
+      - name: id
+        description: "Unique trend identifier"
+        tests:
+          - unique
+          - not_null
+      - name: week
+        description: "Week of aggregation"
+        tests:
+          - not_null
+      - name: category
+        description: "Transaction category"
+        tests:
+          - not_null
+      - name: is_anomaly
+        description: "Anomaly detection flag (>2 std dev)"
+        tests:
+          - not_null
+
+  # Platinum Layer Models
+  - name: platinum_transaction_embeddings
+    description: "AI-ready transaction data with embeddings"
+    columns:
+      - name: id
+        description: "Unique embedding identifier"
+      - name: text
+        description: "Text representation for embedding"
+      - name: metadata
+        description: "JSONB metadata for filtering"
+
+  - name: platinum_product_recommendations
+    description: "Product recommendation features"
+    columns:
+      - name: id
+        description: "Unique recommendation identifier"
+      - name: product_id
+        description: "Product identifier"
+      - name: top_5_similar_products
+        description: "Array of similar product IDs"
+      - name: popularity_score
+        description: "Popularity score (0-1)"
+      - name: revenue_score
+        description: "Revenue contribution score (0-1)"

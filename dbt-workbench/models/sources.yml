@@ -1,0 +1,39 @@
+version: 2
+
+sources:
+  - name: scout
+    description: "Raw Scout data ingestion sources"
+    database: postgres
+    schema: scout
+    tables:
+      - name: raw_transaction_ingestion
+        description: "Raw transaction data from Google Drive, CSV, webhooks"
+        columns:
+          - name: raw_data
+            description: "JSONB blob containing transaction data"
+            tests:
+              - not_null
+          - name: source
+            description: "Data source (google_drive, csv_upload, webhook)"
+          - name: source_filename
+            description: "Original filename or webhook URL"
+          - name: ingested_at
+            description: "Timestamp of ingestion"
+            tests:
+              - not_null
+          - name: ingestion_batch_id
+            description: "Batch identifier for tracking"
+
+      - name: raw_product_ingestion
+        description: "Raw product catalog data"
+        columns:
+          - name: raw_data
+            description: "JSONB blob containing product data"
+            tests:
+              - not_null
+          - name: source
+            description: "Data source"
+          - name: ingested_at
+            description: "Timestamp of ingestion"
+            tests:
+              - not_null

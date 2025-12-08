@@ -1,0 +1,70 @@
+name: 'dbt_workbench'
+version: '1.0.0'
+config-version: 2
+
+# Project profile configuration
+profile: 'workbench'
+
+# Model paths
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+# Model configuration
+models:
+  dbt_workbench:
+    # Bronze layer - raw ingestion
+    bronze:
+      +materialized: table
+      +schema: bronze
+      +tags: ["bronze", "raw"]
+      +on_schema_change: "sync_all_columns"
+
+    # Silver layer - validated and cleaned
+    silver:
+      +materialized: table
+      +schema: silver
+      +tags: ["silver", "validated"]
+      +on_schema_change: "sync_all_columns"
+
+    # Gold layer - business marts
+    gold:
+      +materialized: table
+      +schema: gold
+      +tags: ["gold", "mart"]
+      +on_schema_change: "fail"
+
+    # Platinum layer - AI-ready
+    platinum:
+      +materialized: view
+      +schema: platinum
+      +tags: ["platinum", "ai-ready"]
+      +on_schema_change: "fail"
+
+# Test configuration
+tests:
+  +store_failures: true
+  +schema: test_failures
+
+# Documentation
+docs-paths: ["docs"]
+
+# Quoting configuration
+quoting:
+  database: false
+  schema: false
+  identifier: false
+
+# Seeds configuration
+seeds:
+  dbt_workbench:
+    +schema: seed_data
+    +quote_columns: false

@@ -1,0 +1,44 @@
+workbench:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: "{{ env_var('SUPABASE_HOST', 'aws-1-us-east-1.pooler.supabase.com') }}"
+      port: "{{ env_var('SUPABASE_PORT', '6543') | int }}"
+      user: "{{ env_var('POSTGRES_USER', 'postgres') }}"
+      password: "{{ env_var('POSTGRES_PASSWORD') }}"
+      dbname: "{{ env_var('POSTGRES_DB', 'postgres') }}"
+      schema: public
+      threads: 4
+      keepalives_idle: 0
+      connect_timeout: 10
+      search_path: "public,scout,ip_workbench"
+      sslmode: require
+
+    prod:
+      type: postgres
+      host: "{{ env_var('SUPABASE_HOST') }}"
+      port: "{{ env_var('SUPABASE_PORT', '6543') | int }}"
+      user: "{{ env_var('POSTGRES_USER') }}"
+      password: "{{ env_var('POSTGRES_PASSWORD') }}"
+      dbname: "{{ env_var('POSTGRES_DB') }}"
+      schema: public
+      threads: 8
+      keepalives_idle: 0
+      connect_timeout: 30
+      search_path: "public,scout,ip_workbench"
+      sslmode: require
+
+# Environment variables required:
+# - SUPABASE_HOST: Supabase pooler host (e.g., aws-1-us-east-1.pooler.supabase.com)
+# - SUPABASE_PORT: Connection port (6543 for pooler, 5432 for direct)
+# - POSTGRES_USER: Database user (default: postgres)
+# - POSTGRES_PASSWORD: Database password
+# - POSTGRES_DB: Database name (default: postgres)
+#
+# Example .env file:
+# SUPABASE_HOST=aws-1-us-east-1.pooler.supabase.com
+# SUPABASE_PORT=6543
+# POSTGRES_USER=postgres.xkxyvboeubffxxbebsll
+# POSTGRES_PASSWORD=your_password_here
+# POSTGRES_DB=postgres
