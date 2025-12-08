@@ -1,0 +1,102 @@
+# DigitalOcean App Platform Spec - ADE OCR Backend
+# Service: PaddleOCR-VL-900M receipt processing
+# App ID: b1bb1b07-46a6-4bbb-85a2-e1e8c7f263b9
+
+name: ade-ocr-backend
+region: sgp
+domains:
+  - domain: ade-ocr-backend.insightpulseai.net
+    type: PRIMARY
+
+services:
+  - name: ocr-api
+    github:
+      repo: jgtolentino/archi-agent-framework
+      branch: main
+      deploy_on_push: true
+    source_dir: /services/ocr-backend
+    dockerfile_path: Dockerfile
+
+    instance_count: 2
+    instance_size_slug: professional-xs
+    # professional-xs: 1 vCPU, 1 GB RAM, $12/month
+
+    envs:
+      - key: OCR_PROVIDER
+        value: paddleocr_vl
+        scope: RUN_TIME
+
+      - key: PADDLEOCR_MODEL
+        value: paddleocr-vl-900m
+        scope: RUN_TIME
+
+      - key: MIN_CONFIDENCE
+        value: "0.60"
+        scope: RUN_TIME
+
+      - key: LLM_POSTPROCESS
+        value: "true"
+        scope: RUN_TIME
+
+      - key: OPENAI_API_KEY
+        value: ${OPENAI_API_KEY}
+        scope: RUN_TIME
+        type: SECRET
+
+      - key: SUPABASE_URL
+        value: https://xkxyvboeubffxxbebsll.supabase.co
+        scope: RUN_TIME
+
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        value: ${SUPABASE_SERVICE_ROLE_KEY}
+        scope: RUN_TIME
+        type: SECRET
+
+      - key: LOG_LEVEL
+        value: info
+        scope: RUN_TIME
+
+      - key: MAX_WORKERS
+        value: "4"
+        scope: RUN_TIME
+
+      - key: TIMEOUT_SECONDS
+        value: "30"
+        scope: RUN_TIME
+
+    health_check:
+      http_path: /health
+      initial_delay_seconds: 30
+      period_seconds: 10
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 3
+
+    http_port: 8080
+
+    routes:
+      - path: /
+
+    alerts:
+      - rule: DEPLOYMENT_FAILED
+      - rule: DOMAIN_FAILED
+      - rule: CPU_UTILIZATION
+        value: 80
+      - rule: MEM_UTILIZATION
+        value: 80
+      - rule: RESTART_COUNT
+        value: 5
+
+# Database connection for result storage
+databases:
+  - name: postgres
+    engine: PG
+    version: "15"
+    production: true
+    cluster_name: supabase-xkxyvboeubffxxbebsll
+
+# Static assets (if needed for sample receipts)
+static_sites: []
+
+# Worker for async OCR processing (optional)
+workers: []

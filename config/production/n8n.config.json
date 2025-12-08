@@ -1,0 +1,119 @@
+{
+  "executions": {
+    "process": "main",
+    "mode": "regular",
+    "timeout": 300,
+    "maxTimeout": 3600,
+    "saveDataOnError": "all",
+    "saveDataOnSuccess": "all",
+    "saveExecutionProgress": true,
+    "saveDataManualExecutions": true
+  },
+  "endpoints": {
+    "rest": "rest",
+    "webhook": "webhook",
+    "webhookWaiting": "webhook-waiting",
+    "webhookTest": "webhook-test"
+  },
+  "externalHookFiles": "",
+  "timezone": "Asia/Manila",
+  "userManagement": {
+    "disabled": false,
+    "isInstanceOwnerSetUp": true
+  },
+  "versionNotifications": {
+    "enabled": true,
+    "endpoint": "https://api.n8n.io/api/versions/",
+    "infoUrl": "https://docs.n8n.io/getting-started/installation/updating.html"
+  },
+  "templates": {
+    "enabled": true,
+    "host": "https://api.n8n.io/api/"
+  },
+  "publicApi": {
+    "disabled": false,
+    "path": "api",
+    "swaggerUiDisabled": false
+  },
+  "credentials": {
+    "overwrite": {
+      "data": "",
+      "endpoint": ""
+    }
+  },
+  "workflows": {
+    "defaultName": "My workflow",
+    "onboardingFlowDisabled": true,
+    "callerPolicyDefaultOption": "workflowsFromSameOwner"
+  },
+  "nodes": {
+    "communityPackages": {
+      "enabled": true
+    },
+    "errorTriggerType": "n8n-nodes-base.errorTrigger",
+    "exclude": [],
+    "include": []
+  },
+  "database": {
+    "type": "postgresdb",
+    "postgresdb": {
+      "host": "aws-1-us-east-1.pooler.supabase.com",
+      "port": 6543,
+      "database": "postgres",
+      "user": "postgres.xkxyvboeubffxxbebsll",
+      "password": "${N8N_DB_PASSWORD}",
+      "schema": "n8n",
+      "ssl": {
+        "rejectUnauthorized": false
+      }
+    }
+  },
+  "logging": {
+    "level": "info",
+    "outputs": ["console", "file"],
+    "file": {
+      "location": "logs/n8n.log",
+      "fileCountMax": 100,
+      "fileSizeMax": 16
+    }
+  },
+  "push": {
+    "backend": "websocket"
+  },
+  "security": {
+    "excludeEndpoints": "",
+    "basicAuth": {
+      "active": false
+    },
+    "jwtAuth": {
+      "active": true,
+      "jwtHeader": "Authorization",
+      "jwtHeaderValuePrefix": "Bearer",
+      "jwksUri": "",
+      "jwtIssuer": ""
+    }
+  },
+  "queues": {
+    "bull": {
+      "redis": {
+        "host": "localhost",
+        "port": 6379,
+        "db": 0,
+        "password": ""
+      },
+      "queueRecoveryInterval": 60,
+      "gracefulShutdownTimeout": 30
+    }
+  },
+  "externalSecrets": {
+    "preferGet": false
+  },
+  "deployment": {
+    "type": "default"
+  },
+  "pruning": {
+    "isEnabled": true,
+    "maxAge": 336,
+    "maxCount": 10000
+  }
+}
