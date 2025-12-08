@@ -1,0 +1,323 @@
+{
+  "name": "BIR Status Sync from External Systems",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "name": "Schedule - Every 6 Hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "id": "sync-schedule"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "execute",
+        "query": "SELECT \n  id,\n  tenant_id,\n  workspace_id,\n  form_type,\n  filing_period,\n  agency_name,\n  employee_name,\n  status,\n  metadata\nFROM scout.silver_bir_forms\nWHERE status IN ('submitted', 'in_progress')\n  AND (metadata->>'last_synced_at' IS NULL \n       OR (metadata->>'last_synced_at')::timestamptz < (now() - INTERVAL '6 hours'))\nORDER BY filing_deadline ASC\nLIMIT 50;",
+        "additionalFields": {}
+      },
+      "name": "Query Forms Needing Sync",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "id": "query-forms",
+      "credentials": {
+        "postgres": {
+          "id": "supabase-postgres",
+          "name": "Supabase PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json[\"count\"]}}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "name": "Check If Any Forms to Sync",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [650, 300],
+      "id": "check-forms"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Mock External BIR System API Call\n// In production, replace with actual BIR eFPS/eBIR API integration\nconst form = items[0].json;\n\n// Simulate external system response\nconst externalStatus = {\n  bir_form_id: form.id,\n  form_type: form.form_type,\n  filing_period: form.filing_period,\n  agency_name: form.agency_name,\n  \n  // Mock external system data\n  external_status: (\n    Math.random() > 0.8 ? 'filed' :\n    Math.random() > 0.6 ? 'submitted' :\n    'in_progress'\n  ),\n  external_reference: 'BIR-' + Math.random().toString(36).substr(2, 9).toUpperCase(),\n  external_filed_date: Math.random() > 0.7 ? new Date().toISOString() : null,\n  external_confirmation: Math.random().toString(36).substr(2, 16).toUpperCase(),\n  \n  sync_timestamp: new Date().toISOString(),\n  sync_source: 'mock_bir_api'\n};\n\n// Determine if status changed\nexternalStatus.status_changed = form.status !== externalStatus.external_status;\n\nreturn [{ json: externalStatus }];"
+      },
+      "name": "Fetch External BIR Status",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [850, 250],
+      "id": "fetch-external"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.status_changed}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "Check If Status Changed",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1050, 250],
+      "id": "check-changed"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "execute",
+        "query": "UPDATE scout.silver_bir_forms\nSET status = '{{$json.external_status}}',\n    filed_date = CASE WHEN '{{$json.external_filed_date}}' IS NOT NULL THEN '{{$json.external_filed_date}}'::timestamptz ELSE filed_date END,\n    metadata = jsonb_set(\n      jsonb_set(\n        jsonb_set(\n          COALESCE(metadata, '{}'::jsonb),\n          '{last_synced_at}',\n          to_jsonb('{{$json.sync_timestamp}}'::timestamptz)\n        ),\n        '{external_reference}',\n        to_jsonb('{{$json.external_reference}}'::text)\n      ),\n      '{external_confirmation}',\n      to_jsonb('{{$json.external_confirmation}}'::text)\n    )\nWHERE id = '{{$json.bir_form_id}}'::uuid;",
+        "additionalFields": {}
+      },
+      "name": "Update Form Status from External",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [1250, 200],
+      "id": "update-status",
+      "credentials": {
+        "postgres": {
+          "id": "supabase-postgres",
+          "name": "Supabase PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "execute",
+        "query": "UPDATE scout.silver_bir_forms\nSET metadata = jsonb_set(\n      COALESCE(metadata, '{}'::jsonb),\n      '{last_synced_at}',\n      to_jsonb('{{$json.sync_timestamp}}'::timestamptz)\n    )\nWHERE id = '{{$json.bir_form_id}}'::uuid;",
+        "additionalFields": {}
+      },
+      "name": "Update Sync Timestamp Only",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [1250, 300],
+      "id": "update-timestamp",
+      "credentials": {
+        "postgres": {
+          "id": "supabase-postgres",
+          "name": "Supabase PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://mattermost.insightpulseai.net/hooks/{{$env.MATTERMOST_WEBHOOK_ID}}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "={{\"🔄 **BIR Status Synced from External System**\\n\\n\" +\n\"**Form:** \" + $json.form_type + \"\\n\" +\n\"**Period:** \" + $json.filing_period + \"\\n\" +\n\"**Agency:** \" + $json.agency_name + \"\\n\" +\n\"**New Status:** \" + $json.external_status.toUpperCase() + \"\\n\" +\n\"**External Reference:** \" + $json.external_reference + \"\\n\" +\n($json.external_filed_date ? \"**Filed Date:** \" + new Date($json.external_filed_date).toLocaleDateString('en-PH') : '')}}"
+            },
+            {
+              "name": "channel",
+              "value": "finance-sync"
+            },
+            {
+              "name": "username",
+              "value": "BIR Sync Bot"
+            }
+          ]
+        },
+        "options": {
+          "contentType": "application/json"
+        }
+      },
+      "name": "Notify Status Change",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [1450, 200],
+      "id": "notify-change"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "table": "scout.platinum_analytics_insights",
+        "columns": "tenant_id,workspace_id,insight_type,insight_title,insight_text,source_view,embedding,model,metadata",
+        "values": {
+          "tenant_id": "={{$json.tenant_id}}",
+          "workspace_id": "={{$json.workspace_id}}",
+          "insight_type": "bir_status_sync",
+          "insight_title": "={{\"BIR Status Synced: \" + $json.form_type + \" - \" + $json.filing_period}}",
+          "insight_text": "={{$json.form_type + \" for \" + $json.agency_name + \" synced from external BIR system. New status: \" + $json.external_status + \". Reference: \" + $json.external_reference}}",
+          "source_view": "scout.silver_bir_forms",
+          "embedding": null,
+          "model": "manual",
+          "metadata": "={{JSON.stringify($json)}}"
+        },
+        "additionalFields": {}
+      },
+      "name": "Store Sync Event in Platinum",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [1650, 200],
+      "id": "store-sync",
+      "credentials": {
+        "postgres": {
+          "id": "supabase-postgres",
+          "name": "Supabase PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "name": "No Status Change",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1450, 350],
+      "id": "no-change"
+    },
+    {
+      "parameters": {},
+      "name": "No Forms to Sync",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [850, 400],
+      "id": "no-forms"
+    }
+  ],
+  "connections": {
+    "Schedule - Every 6 Hours": {
+      "main": [
+        [
+          {
+            "node": "Query Forms Needing Sync",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Forms Needing Sync": {
+      "main": [
+        [
+          {
+            "node": "Check If Any Forms to Sync",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check If Any Forms to Sync": {
+      "main": [
+        [
+          {
+            "node": "Fetch External BIR Status",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Forms to Sync",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch External BIR Status": {
+      "main": [
+        [
+          {
+            "node": "Check If Status Changed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check If Status Changed": {
+      "main": [
+        [
+          {
+            "node": "Update Form Status from External",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Sync Timestamp Only",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Form Status from External": {
+      "main": [
+        [
+          {
+            "node": "Notify Status Change",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Sync Timestamp Only": {
+      "main": [
+        [
+          {
+            "node": "No Status Change",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Status Change": {
+      "main": [
+        [
+          {
+            "node": "Store Sync Event in Platinum",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "timezone": "Asia/Manila",
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "BIR",
+      "id": "bir-workflows"
+    },
+    {
+      "name": "Integration",
+      "id": "integration-workflows"
+    }
+  ],
+  "meta": {
+    "instanceId": "ipa-n8n-production"
+  }
+}

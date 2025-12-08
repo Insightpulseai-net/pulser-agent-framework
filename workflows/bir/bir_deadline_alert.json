@@ -1,0 +1,208 @@
+{
+  "name": "BIR Deadline Alert Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 24
+            }
+          ]
+        }
+      },
+      "name": "Schedule - Daily 8AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "id": "bir-schedule-trigger"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "execute",
+        "query": "SELECT \n  id,\n  form_type,\n  filing_period,\n  filing_deadline,\n  agency_name,\n  employee_name,\n  status,\n  EXTRACT(DAY FROM (filing_deadline - CURRENT_TIMESTAMP)) AS days_until_deadline\nFROM scout.silver_bir_forms\nWHERE status IN ('not_started', 'in_progress')\n  AND filing_deadline >= CURRENT_TIMESTAMP\n  AND filing_deadline <= (CURRENT_TIMESTAMP + INTERVAL '7 days')\nORDER BY filing_deadline ASC;",
+        "additionalFields": {}
+      },
+      "name": "Query Upcoming BIR Deadlines",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "id": "query-deadlines",
+      "credentials": {
+        "postgres": {
+          "id": "supabase-postgres",
+          "name": "Supabase PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json[\"count\"]}}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "name": "Check If Any Upcoming",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [650, 300],
+      "id": "check-upcoming"
+    },
+    {
+      "parameters": {
+        "functionCode": "const forms = items[0].json;\nconst upcomingForms = [];\n\nfor (const form of forms) {\n  const daysUntil = form.days_until_deadline;\n  let urgency = 'future';\n  \n  if (daysUntil < 0) {\n    urgency = 'overdue';\n  } else if (daysUntil <= 3) {\n    urgency = 'urgent';\n  } else if (daysUntil <= 7) {\n    urgency = 'upcoming';\n  }\n  \n  upcomingForms.push({\n    id: form.id,\n    form_type: form.form_type,\n    filing_period: form.filing_period,\n    filing_deadline: form.filing_deadline,\n    agency_name: form.agency_name,\n    employee_name: form.employee_name,\n    status: form.status,\n    days_until_deadline: daysUntil,\n    urgency: urgency\n  });\n}\n\nreturn upcomingForms.map(form => ({ json: form }));"
+      },
+      "name": "Format Alert Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [850, 250],
+      "id": "format-alert"
+    },
+    {
+      "parameters": {
+        "url": "https://mattermost.insightpulseai.net/hooks/{{$env.MATTERMOST_WEBHOOK_ID}}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "={{\"⚠️ **BIR Deadline Alert**\\n\\n\" + \n\"**Form:** \" + $json.form_type + \"\\n\" +\n\"**Period:** \" + $json.filing_period + \"\\n\" +\n\"**Agency:** \" + $json.agency_name + \"\\n\" +\n\"**Employee:** \" + $json.employee_name + \"\\n\" +\n\"**Deadline:** \" + new Date($json.filing_deadline).toLocaleDateString('en-PH') + \"\\n\" +\n\"**Days Remaining:** \" + $json.days_until_deadline + \" days\\n\" +\n\"**Status:** \" + $json.status.toUpperCase() + \"\\n\" +\n\"**Urgency:** \" + $json.urgency.toUpperCase()}}"
+            },
+            {
+              "name": "channel",
+              "value": "finance-alerts"
+            },
+            {
+              "name": "username",
+              "value": "BIR Alert Bot"
+            }
+          ]
+        },
+        "options": {
+          "contentType": "application/json"
+        }
+      },
+      "name": "Send Mattermost Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [1050, 250],
+      "id": "mattermost-alert"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "execute",
+        "query": "INSERT INTO scout.platinum_analytics_insights (\n  tenant_id,\n  workspace_id,\n  insight_type,\n  insight_title,\n  insight_text,\n  source_view,\n  embedding,\n  model,\n  metadata\n)\nVALUES (\n  '{{$json.tenant_id}}',\n  '{{$json.workspace_id}}',\n  'bir_alert',\n  'BIR Deadline Alert: {{$json.form_type}} - {{$json.filing_period}}',\n  'BIR form {{$json.form_type}} for {{$json.agency_name}} ({{$json.employee_name}}) is due in {{$json.days_until_deadline}} days. Current status: {{$json.status}}',\n  'scout.gold_bir_filing_status',\n  NULL,\n  'manual',\n  jsonb_build_object('alert_type', 'deadline', 'urgency', '{{$json.urgency}}')\n);",
+        "additionalFields": {}
+      },
+      "name": "Store Alert in Platinum",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [1250, 250],
+      "id": "store-platinum",
+      "credentials": {
+        "postgres": {
+          "id": "supabase-postgres",
+          "name": "Supabase PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "name": "No Upcoming Deadlines",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [850, 400],
+      "id": "no-deadlines"
+    }
+  ],
+  "connections": {
+    "Schedule - Daily 8AM": {
+      "main": [
+        [
+          {
+            "node": "Query Upcoming BIR Deadlines",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Upcoming BIR Deadlines": {
+      "main": [
+        [
+          {
+            "node": "Check If Any Upcoming",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check If Any Upcoming": {
+      "main": [
+        [
+          {
+            "node": "Format Alert Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Upcoming Deadlines",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Alert Data": {
+      "main": [
+        [
+          {
+            "node": "Send Mattermost Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Mattermost Alert": {
+      "main": [
+        [
+          {
+            "node": "Store Alert in Platinum",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "timezone": "Asia/Manila",
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "BIR",
+      "id": "bir-workflows"
+    },
+    {
+      "name": "Finance",
+      "id": "finance-workflows"
+    }
+  ],
+  "meta": {
+    "instanceId": "ipa-n8n-production"
+  }
+}

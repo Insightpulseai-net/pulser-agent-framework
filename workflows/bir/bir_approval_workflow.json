@@ -1,0 +1,322 @@
+{
+  "name": "BIR Multi-Level Approval Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "bir-approval",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "name": "Webhook - Approval Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "bir-approval-webhook",
+      "id": "webhook-approval"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "execute",
+        "query": "SELECT \n  b.id,\n  b.tenant_id,\n  b.workspace_id,\n  b.form_type,\n  b.filing_period,\n  b.filing_deadline,\n  b.agency_name,\n  b.employee_name,\n  b.status,\n  b.metadata\nFROM scout.silver_bir_forms b\nWHERE b.id = '{{$json.bir_form_id}}'::uuid;",
+        "additionalFields": {}
+      },
+      "name": "Get BIR Form",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "id": "get-form",
+      "credentials": {
+        "postgres": {
+          "id": "supabase-postgres",
+          "name": "Supabase PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// BIR Approval Level Logic\n// Determines approval routing based on form metadata\nconst form = items[0].json;\nconst approvalRequest = {\n  bir_form_id: form.id,\n  form_type: form.form_type,\n  filing_period: form.filing_period,\n  agency_name: form.agency_name,\n  current_status: form.status,\n  approval_action: items[0].json.approval_action, // 'approve' or 'reject'\n  approver_role: items[0].json.approver_role,\n  comments: items[0].json.comments || ''\n};\n\n// Define approval levels (3-level approval)\nconst approvalLevels = {\n  level1: { role: 'Finance Supervisor', next: 'level2' },\n  level2: { role: 'Senior Finance Manager', next: 'level3' },\n  level3: { role: 'Finance Director', next: 'submitted' }\n};\n\n// Get current approval level from metadata\nconst metadata = form.metadata || {};\nconst currentLevel = metadata.approval_level || 'level1';\nconst nextLevel = approvalLevels[currentLevel]?.next || 'submitted';\n\n// Determine if approval matches expected role\nconst expectedRole = approvalLevels[currentLevel]?.role;\nconst isAuthorized = approvalRequest.approver_role === expectedRole;\n\napprovalRequest.current_level = currentLevel;\napprovalRequest.expected_role = expectedRole;\napprovalRequest.is_authorized = isAuthorized;\napprovalRequest.next_level = nextLevel;\napprovalRequest.next_approver = approvalLevels[nextLevel]?.role || 'Ready for Filing';\n\nreturn [{ json: approvalRequest }];"
+      },
+      "name": "Determine Approval Level",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [650, 300],
+      "id": "determine-level"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.is_authorized}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "Check Authorization",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [850, 300],
+      "id": "check-auth"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.approval_action}}",
+              "operation": "equals",
+              "value2": "approve"
+            }
+          ]
+        }
+      },
+      "name": "Check Action - Approve or Reject",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1050, 250],
+      "id": "check-action"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "execute",
+        "query": "UPDATE scout.silver_bir_forms\nSET status = CASE \n             WHEN '{{$json.next_level}}' = 'submitted' THEN 'submitted'\n             ELSE 'in_progress'\n             END,\n    metadata = jsonb_set(\n      jsonb_set(\n        COALESCE(metadata, '{}'::jsonb),\n        '{approval_level}',\n        to_jsonb('{{$json.next_level}}'::text)\n      ),\n      '{approvals}',\n      COALESCE(metadata->'approvals', '[]'::jsonb) || to_jsonb(jsonb_build_object(\n        'level', '{{$json.current_level}}',\n        'approver_role', '{{$json.approver_role}}',\n        'action', 'approved',\n        'comments', '{{$json.comments}}',\n        'approved_at', now()\n      ))\n    )\nWHERE id = '{{$json.bir_form_id}}'::uuid;",
+        "additionalFields": {}
+      },
+      "name": "Update - Approved",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [1250, 200],
+      "id": "update-approved",
+      "credentials": {
+        "postgres": {
+          "id": "supabase-postgres",
+          "name": "Supabase PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "execute",
+        "query": "UPDATE scout.silver_bir_forms\nSET status = 'rejected',\n    metadata = jsonb_set(\n      COALESCE(metadata, '{}'::jsonb),\n      '{approvals}',\n      COALESCE(metadata->'approvals', '[]'::jsonb) || to_jsonb(jsonb_build_object(\n        'level', '{{$json.current_level}}',\n        'approver_role', '{{$json.approver_role}}',\n        'action', 'rejected',\n        'comments', '{{$json.comments}}',\n        'rejected_at', now()\n      ))\n    )\nWHERE id = '{{$json.bir_form_id}}'::uuid;",
+        "additionalFields": {}
+      },
+      "name": "Update - Rejected",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [1250, 300],
+      "id": "update-rejected",
+      "credentials": {
+        "postgres": {
+          "id": "supabase-postgres",
+          "name": "Supabase PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://mattermost.insightpulseai.net/hooks/{{$env.MATTERMOST_WEBHOOK_ID}}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "={{\"✅ **BIR Form Approved - \" + $json.current_level.toUpperCase() + \"**\\n\\n\" +\n\"**Form:** \" + $json.form_type + \"\\n\" +\n\"**Period:** \" + $json.filing_period + \"\\n\" +\n\"**Agency:** \" + $json.agency_name + \"\\n\" +\n\"**Approved By:** \" + $json.approver_role + \"\\n\" +\n\"**Next Approver:** \" + $json.next_approver + \"\\n\" +\n($json.comments ? \"**Comments:** \" + $json.comments : '')}}"
+            },
+            {
+              "name": "channel",
+              "value": "finance-approvals"
+            },
+            {
+              "name": "username",
+              "value": "BIR Approval Bot"
+            }
+          ]
+        },
+        "options": {
+          "contentType": "application/json"
+        }
+      },
+      "name": "Notify Approval",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [1450, 200],
+      "id": "notify-approval"
+    },
+    {
+      "parameters": {
+        "url": "https://mattermost.insightpulseai.net/hooks/{{$env.MATTERMOST_WEBHOOK_ID}}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "={{\"❌ **BIR Form Rejected - \" + $json.current_level.toUpperCase() + \"**\\n\\n\" +\n\"**Form:** \" + $json.form_type + \"\\n\" +\n\"**Period:** \" + $json.filing_period + \"\\n\" +\n\"**Agency:** \" + $json.agency_name + \"\\n\" +\n\"**Rejected By:** \" + $json.approver_role + \"\\n\" +\n\"**Comments:** \" + $json.comments + \"\\n\" +\n\"**Action Required:** Review and resubmit\"}}"
+            },
+            {
+              "name": "channel",
+              "value": "finance-approvals"
+            },
+            {
+              "name": "username",
+              "value": "BIR Approval Bot"
+            }
+          ]
+        },
+        "options": {
+          "contentType": "application/json"
+        }
+      },
+      "name": "Notify Rejection",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [1450, 300],
+      "id": "notify-rejection"
+    },
+    {
+      "parameters": {
+        "url": "https://mattermost.insightpulseai.net/hooks/{{$env.MATTERMOST_WEBHOOK_ID}}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "={{\"⚠️ **Unauthorized BIR Approval Attempt**\\n\\n\" +\n\"**Form:** \" + $json.form_type + \" - \" + $json.filing_period + \"\\n\" +\n\"**Attempted By:** \" + $json.approver_role + \"\\n\" +\n\"**Expected Role:** \" + $json.expected_role + \"\\n\" +\n\"**Action:** Request blocked\"}}"
+            },
+            {
+              "name": "channel",
+              "value": "finance-security"
+            },
+            {
+              "name": "username",
+              "value": "BIR Security Bot"
+            }
+          ]
+        },
+        "options": {
+          "contentType": "application/json"
+        }
+      },
+      "name": "Notify Unauthorized Attempt",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [1050, 400],
+      "id": "notify-unauthorized"
+    }
+  ],
+  "connections": {
+    "Webhook - Approval Request": {
+      "main": [
+        [
+          {
+            "node": "Get BIR Form",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get BIR Form": {
+      "main": [
+        [
+          {
+            "node": "Determine Approval Level",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Determine Approval Level": {
+      "main": [
+        [
+          {
+            "node": "Check Authorization",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Authorization": {
+      "main": [
+        [
+          {
+            "node": "Check Action - Approve or Reject",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify Unauthorized Attempt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Action - Approve or Reject": {
+      "main": [
+        [
+          {
+            "node": "Update - Approved",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update - Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update - Approved": {
+      "main": [
+        [
+          {
+            "node": "Notify Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update - Rejected": {
+      "main": [
+        [
+          {
+            "node": "Notify Rejection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "timezone": "Asia/Manila",
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "BIR",
+      "id": "bir-workflows"
+    },
+    {
+      "name": "Approval",
+      "id": "approval-workflows"
+    }
+  ],
+  "meta": {
+    "instanceId": "ipa-n8n-production"
+  }
+}

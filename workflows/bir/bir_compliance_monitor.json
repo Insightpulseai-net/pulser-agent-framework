@@ -1,0 +1,280 @@
+{
+  "name": "BIR Compliance Monitor",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 24
+            }
+          ]
+        }
+      },
+      "name": "Schedule - Daily 6AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "id": "compliance-schedule"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "execute",
+        "query": "SELECT \n  COUNT(*) FILTER (WHERE status = 'filed' AND filed_date <= filing_deadline) AS on_time_count,\n  COUNT(*) FILTER (WHERE status = 'filed' AND filed_date > filing_deadline) AS late_count,\n  COUNT(*) FILTER (WHERE status IN ('not_started', 'in_progress', 'submitted') AND filing_deadline < CURRENT_TIMESTAMP) AS overdue_count,\n  COUNT(*) FILTER (WHERE status IN ('not_started', 'in_progress', 'submitted') AND filing_deadline >= CURRENT_TIMESTAMP) AS pending_count,\n  COUNT(*) AS total_count,\n  ROUND(COUNT(*) FILTER (WHERE status = 'filed' AND filed_date <= filing_deadline)::numeric / NULLIF(COUNT(*), 0) * 100, 2) AS compliance_rate\nFROM scout.silver_bir_forms\nWHERE filing_period LIKE (TO_CHAR(CURRENT_DATE, 'YYYY') || '%');",
+        "additionalFields": {}
+      },
+      "name": "Query Compliance Statistics",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "id": "query-compliance",
+      "credentials": {
+        "postgres": {
+          "id": "supabase-postgres",
+          "name": "Supabase PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "execute",
+        "query": "SELECT \n  form_type,\n  COUNT(*) AS form_count,\n  COUNT(*) FILTER (WHERE status = 'filed' AND filed_date <= filing_deadline) AS on_time,\n  COUNT(*) FILTER (WHERE status = 'filed' AND filed_date > filing_deadline) AS late,\n  COUNT(*) FILTER (WHERE status IN ('not_started', 'in_progress', 'submitted') AND filing_deadline < CURRENT_TIMESTAMP) AS overdue\nFROM scout.silver_bir_forms\nWHERE filing_period LIKE (TO_CHAR(CURRENT_DATE, 'YYYY') || '%')\nGROUP BY form_type\nORDER BY form_type;",
+        "additionalFields": {}
+      },
+      "name": "Query Compliance By Form Type",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [650, 300],
+      "id": "query-by-form-type",
+      "credentials": {
+        "postgres": {
+          "id": "supabase-postgres",
+          "name": "Supabase PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "execute",
+        "query": "SELECT \n  agency_name,\n  COUNT(*) AS form_count,\n  COUNT(*) FILTER (WHERE status = 'filed' AND filed_date <= filing_deadline) AS on_time,\n  COUNT(*) FILTER (WHERE status IN ('not_started', 'in_progress', 'submitted') AND filing_deadline < CURRENT_TIMESTAMP) AS overdue,\n  ROUND(COUNT(*) FILTER (WHERE status = 'filed' AND filed_date <= filing_deadline)::numeric / NULLIF(COUNT(*), 0) * 100, 2) AS agency_compliance_rate\nFROM scout.silver_bir_forms\nWHERE filing_period LIKE (TO_CHAR(CURRENT_DATE, 'YYYY') || '%')\nGROUP BY agency_name\nORDER BY agency_compliance_rate ASC\nLIMIT 5;",
+        "additionalFields": {}
+      },
+      "name": "Query Top 5 At-Risk Agencies",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [850, 300],
+      "id": "query-at-risk",
+      "credentials": {
+        "postgres": {
+          "id": "supabase-postgres",
+          "name": "Supabase PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// BIR Compliance Report Generator\nconst overall = items[0].json;\nconst byFormType = items[1].json;\nconst atRiskAgencies = items[2].json;\n\n// Build compliance report\nconst report = {\n  report_date: new Date().toISOString(),\n  year: new Date().getFullYear(),\n  overall_statistics: {\n    total_forms: overall.total_count,\n    on_time: overall.on_time_count,\n    late: overall.late_count,\n    overdue: overall.overdue_count,\n    pending: overall.pending_count,\n    compliance_rate: overall.compliance_rate\n  },\n  by_form_type: byFormType,\n  at_risk_agencies: atRiskAgencies,\n  compliance_status: (\n    overall.compliance_rate >= 95 ? 'excellent' :\n    overall.compliance_rate >= 85 ? 'good' :\n    overall.compliance_rate >= 75 ? 'acceptable' :\n    'poor'\n  ),\n  recommendations: []\n};\n\n// Generate recommendations\nif (overall.overdue_count > 0) {\n  report.recommendations.push(`Address ${overall.overdue_count} overdue forms immediately`);\n}\nif (overall.compliance_rate < 85) {\n  report.recommendations.push('Compliance rate below 85% - review processes and escalate to management');\n}\nif (atRiskAgencies.length > 0) {\n  report.recommendations.push(`${atRiskAgencies.length} agencies at risk - provide additional support`);\n}\n\nreturn [{ json: report }];"
+      },
+      "name": "Generate Compliance Report",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1050, 300],
+      "id": "generate-report"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "table": "scout.platinum_analytics_insights",
+        "columns": "tenant_id,workspace_id,insight_type,insight_title,insight_text,source_view,embedding,model,metadata",
+        "values": {
+          "tenant_id": "={{$env.TENANT_ID}}",
+          "workspace_id": "={{$env.WORKSPACE_ID}}",
+          "insight_type": "bir_compliance",
+          "insight_title": "={{\"BIR Compliance Report - \" + $json.report_date}}",
+          "insight_text": "={{JSON.stringify($json)}}",
+          "source_view": "scout.silver_bir_forms",
+          "embedding": null,
+          "model": "manual",
+          "metadata": "={{JSON.stringify($json)}}"
+        },
+        "additionalFields": {}
+      },
+      "name": "Store Report in Platinum",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [1250, 300],
+      "id": "store-platinum",
+      "credentials": {
+        "postgres": {
+          "id": "supabase-postgres",
+          "name": "Supabase PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json.overall_statistics.compliance_rate}}",
+              "operation": "smaller",
+              "value2": 85
+            }
+          ]
+        }
+      },
+      "name": "Check If Alert Needed",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1450, 300],
+      "id": "check-alert"
+    },
+    {
+      "parameters": {
+        "url": "https://mattermost.insightpulseai.net/hooks/{{$env.MATTERMOST_WEBHOOK_ID}}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "={{\"🚨 **BIR Compliance Alert**\\n\\n\" +\n\"**Compliance Rate:** \" + $json.overall_statistics.compliance_rate + \"%\\n\" +\n\"**Status:** \" + $json.compliance_status.toUpperCase() + \"\\n\" +\n\"**Overdue Forms:** \" + $json.overall_statistics.overdue + \"\\n\" +\n\"**Late Forms:** \" + $json.overall_statistics.late + \"\\n\\n\" +\n\"**Recommendations:**\\n\" +\n$json.recommendations.map(r => \"- \" + r).join('\\n')}}"
+            },
+            {
+              "name": "channel",
+              "value": "finance-alerts"
+            },
+            {
+              "name": "username",
+              "value": "BIR Compliance Bot"
+            }
+          ]
+        },
+        "options": {
+          "contentType": "application/json"
+        }
+      },
+      "name": "Send Compliance Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [1650, 250],
+      "id": "send-alert"
+    },
+    {
+      "parameters": {},
+      "name": "No Alert Needed",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1650, 400],
+      "id": "no-alert"
+    }
+  ],
+  "connections": {
+    "Schedule - Daily 6AM": {
+      "main": [
+        [
+          {
+            "node": "Query Compliance Statistics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Compliance Statistics": {
+      "main": [
+        [
+          {
+            "node": "Query Compliance By Form Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Compliance By Form Type": {
+      "main": [
+        [
+          {
+            "node": "Query Top 5 At-Risk Agencies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Top 5 At-Risk Agencies": {
+      "main": [
+        [
+          {
+            "node": "Generate Compliance Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Compliance Report": {
+      "main": [
+        [
+          {
+            "node": "Store Report in Platinum",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Report in Platinum": {
+      "main": [
+        [
+          {
+            "node": "Check If Alert Needed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check If Alert Needed": {
+      "main": [
+        [
+          {
+            "node": "Send Compliance Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Alert Needed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "timezone": "Asia/Manila",
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "BIR",
+      "id": "bir-workflows"
+    },
+    {
+      "name": "Compliance",
+      "id": "compliance-workflows"
+    }
+  ],
+  "meta": {
+    "instanceId": "ipa-n8n-production"
+  }
+}
