@@ -59,8 +59,8 @@ RESET := \033[0m
 .PHONY: help
 help: ## Show this help message
 	@echo ""
-	@echo "$(CYAN)InsightPulseAI - One-Click Concur Suite$(RESET)"
-	@echo "$(CYAN)========================================$(RESET)"
+	@echo "$(CYAN)InsightPulseAI - One-Click Concur Suite + RAG$(RESET)"
+	@echo "$(CYAN)==============================================$(RESET)"
 	@echo ""
 	@echo "$(YELLOW)Infrastructure:$(RESET)"
 	@grep -E '^(infra-|terraform-).*:.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*##"}; {printf "  $(GREEN)%-20s$(RESET) %s\n", $$1, $$2}'
@@ -70,6 +70,12 @@ help: ## Show this help message
 	@echo ""
 	@echo "$(YELLOW)Odoo & Migrations:$(RESET)"
 	@grep -E '^(odoo-|seed-).*:.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*##"}; {printf "  $(GREEN)%-20s$(RESET) %s\n", $$1, $$2}'
+	@echo ""
+	@echo "$(YELLOW)Database:$(RESET)"
+	@grep -E '^db-.*:.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*##"}; {printf "  $(GREEN)%-20s$(RESET) %s\n", $$1, $$2}'
+	@echo ""
+	@echo "$(YELLOW)RAG Pipeline:$(RESET)"
+	@grep -E '^rag-.*:.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*##"}; {printf "  $(GREEN)%-20s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(YELLOW)Testing & Validation:$(RESET)"
 	@grep -E '^(check-|uat|test-).*:.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*##"}; {printf "  $(GREEN)%-20s$(RESET) %s\n", $$1, $$2}'
@@ -380,6 +386,57 @@ db-restore: ## Restore database from backup
 .PHONY: db-shell
 db-shell: ## Open PostgreSQL shell
 	@$(DOCKER_COMPOSE) -f $(COMPOSE_BASE) -f $(COMPOSE_ODOO) exec postgres psql -U postgres -d odoo
+
+.PHONY: db-migrate
+db-migrate: ## Run SQL migrations (RAG core schema, etc.)
+	@echo "$(CYAN)🔄 Running database migrations...$(RESET)"
+	@for migration in $(ROOT_DIR)/migrations/*.sql; do \
+		echo "  Applying: $$(basename $$migration)"; \
+		$(DOCKER_COMPOSE) -f $(COMPOSE_BASE) exec -T postgres psql -U postgres -d odoo -f /migrations/$$(basename $$migration) 2>/dev/null || \
+		psql "$$DATABASE_URL" -f "$$migration"; \
+	done
+	@echo "$(GREEN)✅ Database migrations complete$(RESET)"
+
+# =============================================================================
+# RAG PIPELINE
+# =============================================================================
+
+.PHONY: rag-ingest
+rag-ingest: deps ## Ingest documents into RAG pipeline
+	@echo "$(CYAN)📄 Running RAG document ingestion...$(RESET)"
+	@$(PYTHON) $(SCRIPTS_DIR)/rag_ingest.py
+	@echo "$(GREEN)✅ RAG ingestion complete$(RESET)"
+
+.PHONY: rag-embed
+rag-embed: deps ## Generate embeddings for RAG chunks
+	@echo "$(CYAN)🔢 Running RAG embedding generation...$(RESET)"
+	@$(PYTHON) $(SCRIPTS_DIR)/rag_embed.py
+	@echo "$(GREEN)✅ RAG embedding complete$(RESET)"
+
+.PHONY: rag-eval
+rag-eval: deps ## Evaluate RAG query performance
+	@echo "$(CYAN)📊 Running RAG evaluation...$(RESET)"
+	@$(PYTHON) $(SCRIPTS_DIR)/rag_eval.py
+	@echo "$(GREEN)✅ RAG evaluation complete$(RESET)"
+
+.PHONY: rag-eval-stats
+rag-eval-stats: deps ## Show RAG evaluation statistics
+	@echo "$(CYAN)📊 RAG Evaluation Statistics:$(RESET)"
+	@$(PYTHON) $(SCRIPTS_DIR)/rag_eval.py --stats
+
+.PHONY: rag-pipeline
+rag-pipeline: rag-ingest rag-embed rag-eval ## Run full RAG pipeline (ingest → embed → eval)
+	@echo ""
+	@echo "$(GREEN)========================================$(RESET)"
+	@echo "$(GREEN)✅ RAG PIPELINE COMPLETE$(RESET)"
+	@echo "$(GREEN)========================================$(RESET)"
+	@echo ""
+
+.PHONY: seed-rag
+seed-rag: deps ## Seed RAG demo data only
+	@echo "$(CYAN)🌱 Seeding RAG demo data...$(RESET)"
+	@$(PYTHON) $(SCRIPTS_DIR)/seed_demo_data.py --rag-only
+	@echo "$(GREEN)✅ RAG demo data seeded$(RESET)"
 
 # =============================================================================
 # CLEANUP

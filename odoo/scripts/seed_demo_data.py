@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Demo Data Seeder for Concur-Style T&E Suite
-============================================
+Demo Data Seeder for Concur-Style T&E Suite + RAG
+==================================================
 
 This script seeds realistic demo data for testing and UAT:
 - Companies and chart of accounts
@@ -10,30 +10,37 @@ This script seeds realistic demo data for testing and UAT:
 - Per-diem rules and project codes
 - Cash advance rules
 - Sample trips, expense reports, and approvals
+- RAG knowledge base with demo documents
 
 Usage:
     python seed_demo_data.py              # Seed demo data
     python seed_demo_data.py --reset      # Reset and reseed
     python seed_demo_data.py --prod       # Seed production baseline only
     python seed_demo_data.py --dry-run    # Show what would be created
+    python seed_demo_data.py --rag-only   # Seed only RAG demo data
 
 Environment Variables:
     ODOO_URL        - Odoo server URL (default: http://localhost:8069)
     ODOO_DB         - Database name (default: odoo)
     ODOO_USER       - Admin username (default: admin)
     ODOO_PASSWORD   - Admin password (required)
+    DATABASE_URL    - PostgreSQL connection for RAG tables
 """
 
 import os
 import sys
 import argparse
 import logging
+import hashlib
+import uuid
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Optional, Dict, List, Any
 
 try:
     import odoorpc
+    import psycopg2
+    from psycopg2.extras import DictCursor, Json
     from dotenv import load_dotenv
     from rich.console import Console
     from rich.progress import Progress, SpinnerColumn, TextColumn
@@ -50,6 +57,7 @@ ODOO_URL = os.getenv("ODOO_URL", "http://localhost:8069")
 ODOO_DB = os.getenv("ODOO_DB", "odoo")
 ODOO_USER = os.getenv("ODOO_USER", "admin")
 ODOO_PASSWORD = os.getenv("ODOO_PASSWORD", "")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 # Console for rich output
 console = Console()
@@ -281,6 +289,440 @@ DEMO_CASH_ADVANCES = [
         "status": "pending",
     },
 ]
+
+# ===========================================================================
+# RAG DEMO DATA DEFINITIONS
+# ===========================================================================
+
+RAG_DEMO_DOCUMENTS = [
+    {
+        "title": "InsightPulseAI Expense Policy 2024",
+        "kind": "policy",
+        "content_type": "markdown",
+        "full_text": """# InsightPulseAI Expense Policy
+
+## 1. Overview
+This policy governs all business expense reimbursements for InsightPulseAI employees.
+
+## 2. Approval Thresholds
+- Under PHP 5,000: Manager approval only
+- PHP 5,000 - 20,000: Manager + Finance approval
+- Over PHP 20,000: Manager + Finance + CFO approval
+
+## 3. Expense Categories
+
+### 3.1 Transportation
+- Economy class airfare for domestic travel
+- Business class requires CFO pre-approval for flights over 4 hours
+- Grab/taxi receipts required for amounts over PHP 300
+
+### 3.2 Accommodation
+- Maximum PHP 8,000/night for Metro Manila
+- Maximum PHP 6,000/night for other Philippine cities
+- International rates per destination approved list
+
+### 3.3 Meals and Entertainment
+- Client entertainment requires pre-approval
+- Per diem rates apply for business travel
+- Alcohol reimbursement limited to client entertainment
+
+## 4. Receipt Requirements
+- Original receipts required for amounts over PHP 500
+- Digital receipts (PDF/image) accepted
+- Lost receipt affidavit for amounts under PHP 1,000
+
+## 5. Cash Advances
+- Maximum PHP 50,000 per request
+- Must be liquidated within 30 days
+- 5-day grace period after trip completion
+""",
+    },
+    {
+        "title": "Travel Booking Guide",
+        "kind": "guide",
+        "content_type": "markdown",
+        "full_text": """# Travel Booking Guide for InsightPulseAI Employees
+
+## Booking Process
+
+### Step 1: Pre-Approval
+1. Log into the T&E portal
+2. Create a Travel Request with estimated costs
+3. Submit for manager approval
+4. Wait for approval before booking
+
+### Step 2: Booking
+Use approved travel agencies:
+- CWT Philippines (preferred)
+- BCD Travel
+- Direct airline booking (for simple routes)
+
+### Step 3: Travel Advance
+- Request cash advance if needed
+- Submit at least 7 days before travel
+- Include detailed expense breakdown
+
+## Per Diem Rates
+
+| Destination | Daily Rate | Currency |
+|-------------|-----------|----------|
+| Metro Manila | 1,500 | PHP |
+| Cebu City | 1,800 | PHP |
+| Davao City | 1,600 | PHP |
+| Singapore | 250 | SGD |
+| Hong Kong | 2,000 | HKD |
+
+## FAQ
+
+**Q: Can I book business class?**
+A: Business class requires CFO pre-approval and is only for flights over 4 hours.
+
+**Q: What if my trip is cancelled?**
+A: Submit cancellation request immediately. Refundable tickets preferred.
+""",
+    },
+    {
+        "title": "Expense Report Submission Checklist",
+        "kind": "checklist",
+        "content_type": "markdown",
+        "full_text": """# Expense Report Submission Checklist
+
+## Before You Start
+- [ ] Collect all receipts
+- [ ] Verify project codes
+- [ ] Check per diem rates
+
+## Required Information
+1. **Trip Details**
+   - Destination
+   - Business purpose
+   - Project code
+   - Dates
+
+2. **Receipts**
+   - Clear, legible copies
+   - Date visible
+   - Amount visible
+   - Vendor name visible
+
+3. **Approvals**
+   - Manager approval for all
+   - Finance approval for amounts > PHP 5,000
+   - CFO approval for amounts > PHP 20,000
+
+## Submission Deadline
+- Within 30 days of expense date
+- Within 5 days of trip return
+
+## Common Rejection Reasons
+- Missing receipts
+- Incorrect project code
+- Exceeded policy limits
+- Missing pre-approval for special items
+""",
+    },
+    {
+        "title": "BIR Compliance for Employee Expenses",
+        "kind": "compliance",
+        "content_type": "markdown",
+        "full_text": """# BIR Compliance Guide for Employee Expenses
+
+## Overview
+All expense reimbursements must comply with Bureau of Internal Revenue (BIR) requirements.
+
+## Documentary Requirements
+
+### Official Receipts (OR)
+Required for:
+- Vendor purchases over PHP 100
+- All services rendered
+- Professional fees
+
+### Sales Invoice
+Acceptable for:
+- Product purchases
+- Supplies and materials
+
+## VAT Treatment
+- 12% VAT on taxable goods/services
+- VAT-exempt items per BIR list
+- Input VAT recovery for registered vendors
+
+## Per Diem Tax Treatment
+- De minimis per diem up to PHP 1,500/day: Non-taxable
+- Excess treated as additional compensation
+
+## Record Keeping
+- Retain receipts for 10 years
+- Digital copies with proper backup
+- Cross-reference with bank statements
+
+## Common Compliance Issues
+1. Missing TIN on receipts
+2. Unofficial receipts for large amounts
+3. Personal expenses mixed with business
+4. Incorrect VAT computation
+""",
+    },
+    {
+        "title": "Scout AI Platform User Guide",
+        "kind": "technical",
+        "content_type": "markdown",
+        "full_text": """# Scout AI Platform User Guide
+
+## Introduction
+Scout AI is InsightPulseAI's intelligent expense assistant powered by RAG technology.
+
+## Features
+
+### 1. Smart Receipt Scanning
+- Upload receipt images
+- Automatic OCR extraction
+- Category suggestion
+- Amount detection
+
+### 2. Policy Compliance Check
+- Real-time policy validation
+- Warning for potential violations
+- Suggested corrections
+
+### 3. Natural Language Queries
+Ask questions like:
+- "What's the per diem rate for Singapore?"
+- "Do I need pre-approval for client dinner?"
+- "What's the receipt threshold?"
+
+### 4. Expense Analytics
+- Spending trends
+- Budget tracking
+- Category breakdown
+
+## Getting Started
+
+1. Log into portal.insightpulseai.net
+2. Click "Scout AI Assistant"
+3. Upload receipts or ask questions
+4. Review suggestions
+5. Submit for approval
+
+## API Integration
+For developers integrating with Scout AI:
+```python
+from scout_ai import ScoutClient
+
+client = ScoutClient(api_key="...")
+response = client.query("What's the meal limit?")
+print(response.answer)
+```
+""",
+    },
+]
+
+RAG_DEMO_QUERIES = [
+    {
+        "query_text": "What is the maximum per diem rate for Singapore travel?",
+        "expected_answer": "The per diem rate for Singapore is 250 SGD per day.",
+        "model": "gpt-4o-mini",
+    },
+    {
+        "query_text": "Do I need CFO approval for a PHP 15,000 expense?",
+        "expected_answer": "For expenses between PHP 5,000 and PHP 20,000, you need Manager and Finance approval. CFO approval is only required for amounts over PHP 20,000.",
+        "model": "gpt-4o-mini",
+    },
+    {
+        "query_text": "What are the receipt requirements for taxi expenses?",
+        "expected_answer": "Grab/taxi receipts are required for amounts over PHP 300. Original receipts are required for amounts over PHP 500.",
+        "model": "gpt-4o-mini",
+    },
+    {
+        "query_text": "How long do I have to liquidate a cash advance?",
+        "expected_answer": "Cash advances must be liquidated within 30 days, with a 5-day grace period after trip completion.",
+        "model": "gpt-4o-mini",
+    },
+    {
+        "query_text": "What is the VAT rate for business expenses in the Philippines?",
+        "expected_answer": "The VAT rate is 12% on taxable goods and services. Some items are VAT-exempt per BIR guidelines.",
+        "model": "gpt-4o-mini",
+    },
+]
+
+
+class RAGSeeder:
+    """Seeds RAG demo data into PostgreSQL."""
+
+    def __init__(self, db_url: str):
+        self.db_url = db_url
+        self.conn = None
+        self.tenant_id = None
+
+    def connect(self) -> bool:
+        """Connect to PostgreSQL."""
+        if not self.db_url:
+            console.print("[yellow]DATABASE_URL not set, skipping RAG seeding[/yellow]")
+            return False
+
+        try:
+            self.conn = psycopg2.connect(self.db_url)
+            console.print("[green]Connected to PostgreSQL for RAG seeding[/green]")
+            return True
+        except Exception as e:
+            console.print(f"[yellow]RAG DB connection failed: {e}[/yellow]")
+            return False
+
+    def close(self):
+        """Close database connection."""
+        if self.conn:
+            self.conn.close()
+
+    def _get_or_create_tenant(self, name: str = "InsightPulseAI") -> str:
+        """Get or create a demo tenant."""
+        with self.conn.cursor(cursor_factory=DictCursor) as cur:
+            # Check if tenant exists
+            cur.execute("SELECT id FROM tenants WHERE name = %s", (name,))
+            row = cur.fetchone()
+            if row:
+                return str(row["id"])
+
+            # Create tenant
+            tenant_id = str(uuid.uuid4())
+            cur.execute("""
+                INSERT INTO tenants (id, name, slug, settings)
+                VALUES (%s, %s, %s, %s)
+            """, (tenant_id, name, name.lower().replace(" ", "-"), Json({"demo": True})))
+            self.conn.commit()
+            return tenant_id
+
+    def seed_documents(self, dry_run: bool = False) -> Dict[str, int]:
+        """Seed RAG demo documents."""
+        console.print("[cyan]Seeding RAG documents...[/cyan]")
+        doc_ids = {}
+
+        if dry_run:
+            for doc in RAG_DEMO_DOCUMENTS:
+                console.print(f"  Would create document: {doc['title']}")
+            return {"documents": len(RAG_DEMO_DOCUMENTS)}
+
+        self.tenant_id = self._get_or_create_tenant()
+
+        with self.conn.cursor() as cur:
+            for doc in RAG_DEMO_DOCUMENTS:
+                try:
+                    # Create source
+                    source_id = str(uuid.uuid4())
+                    cur.execute("""
+                        INSERT INTO rag_sources (id, tenant_id, kind, uri, display_name, content_type, status)
+                        VALUES (%s, %s, %s, %s, %s, %s, 'processed')
+                    """, (
+                        source_id,
+                        self.tenant_id,
+                        doc["kind"],
+                        f"demo://{doc['title'].lower().replace(' ', '-')}",
+                        doc["title"],
+                        doc["content_type"],
+                    ))
+
+                    # Create document
+                    doc_id = str(uuid.uuid4())
+                    content = doc["full_text"]
+                    hash_sha256 = hashlib.sha256(content.encode()).hexdigest()
+
+                    cur.execute("""
+                        INSERT INTO rag_documents (id, tenant_id, source_id, title, word_count, hash_sha256, full_text)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    """, (
+                        doc_id,
+                        self.tenant_id,
+                        source_id,
+                        doc["title"],
+                        len(content.split()),
+                        hash_sha256,
+                        content,
+                    ))
+
+                    # Create chunks (simple paragraph-based chunking)
+                    paragraphs = [p.strip() for p in content.split("\n\n") if p.strip()]
+                    for i, para in enumerate(paragraphs):
+                        if len(para) < 20:  # Skip very short chunks
+                            continue
+                        chunk_id = str(uuid.uuid4())
+                        cur.execute("""
+                            INSERT INTO rag_chunks (id, tenant_id, document_id, chunk_index, text, token_count, chunking_strategy)
+                            VALUES (%s, %s, %s, %s, %s, %s, 'paragraph')
+                        """, (
+                            chunk_id,
+                            self.tenant_id,
+                            doc_id,
+                            i,
+                            para,
+                            len(para.split()),  # Rough token estimate
+                        ))
+
+                    doc_ids[doc["title"]] = doc_id
+                    logger.info(f"Created RAG document: {doc['title']}")
+
+                except Exception as e:
+                    console.print(f"[yellow]  Warning: Could not create {doc['title']}: {e}[/yellow]")
+                    self.conn.rollback()
+                    continue
+
+            self.conn.commit()
+
+        return {"documents": len(doc_ids)}
+
+    def seed_queries(self, dry_run: bool = False) -> Dict[str, int]:
+        """Seed sample RAG queries for evaluation."""
+        console.print("[cyan]Seeding RAG evaluation queries...[/cyan]")
+
+        if dry_run:
+            for query in RAG_DEMO_QUERIES:
+                console.print(f"  Would create query: {query['query_text'][:50]}...")
+            return {"queries": len(RAG_DEMO_QUERIES)}
+
+        if not self.tenant_id:
+            self.tenant_id = self._get_or_create_tenant()
+
+        count = 0
+        with self.conn.cursor() as cur:
+            for query in RAG_DEMO_QUERIES:
+                try:
+                    query_id = str(uuid.uuid4())
+                    cur.execute("""
+                        INSERT INTO rag_queries (
+                            id, tenant_id, query_text, model,
+                            response_text, success, retrieved_chunks
+                        )
+                        VALUES (%s, %s, %s, %s, %s, true, %s)
+                    """, (
+                        query_id,
+                        self.tenant_id,
+                        query["query_text"],
+                        query["model"],
+                        query["expected_answer"],
+                        Json([]),  # Will be populated during actual retrieval
+                    ))
+                    count += 1
+                    logger.info(f"Created RAG query: {query['query_text'][:30]}...")
+
+                except Exception as e:
+                    console.print(f"[yellow]  Warning: Could not create query: {e}[/yellow]")
+                    self.conn.rollback()
+                    continue
+
+            self.conn.commit()
+
+        return {"queries": count}
+
+    def seed_all(self, dry_run: bool = False) -> Dict:
+        """Seed all RAG demo data."""
+        results = {"rag_documents": 0, "rag_queries": 0}
+
+        doc_result = self.seed_documents(dry_run)
+        results["rag_documents"] = doc_result.get("documents", 0)
+
+        query_result = self.seed_queries(dry_run)
+        results["rag_queries"] = query_result.get("queries", 0)
+
+        return results
 
 
 class OdooSeeder:
@@ -618,32 +1060,53 @@ def print_results(results: Dict):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Seed demo data for Concur Suite")
+    parser = argparse.ArgumentParser(description="Seed demo data for Concur Suite + RAG")
     parser.add_argument("--reset", action="store_true", help="Reset demo data first")
     parser.add_argument("--prod", action="store_true", help="Seed production baseline only")
     parser.add_argument("--dry-run", "-n", action="store_true", help="Show what would be created")
+    parser.add_argument("--rag-only", action="store_true", help="Seed only RAG demo data")
+    parser.add_argument("--skip-rag", action="store_true", help="Skip RAG seeding")
     parser.add_argument("--url", default=ODOO_URL, help=f"Odoo URL (default: {ODOO_URL})")
     parser.add_argument("--db", default=ODOO_DB, help=f"Database name (default: {ODOO_DB})")
     parser.add_argument("--user", "-u", default=ODOO_USER, help=f"Username (default: {ODOO_USER})")
     parser.add_argument("--password", "-p", default=ODOO_PASSWORD, help="Password")
+    parser.add_argument("--database-url", default=DATABASE_URL, help="PostgreSQL URL for RAG tables")
 
     args = parser.parse_args()
 
-    if not args.password:
-        console.print("[red]ERROR: ODOO_PASSWORD environment variable or --password required[/red]")
-        sys.exit(1)
+    all_results = {}
 
-    seeder = OdooSeeder(args.url, args.db, args.user, args.password)
+    # Seed RAG data if requested
+    if args.rag_only or not args.skip_rag:
+        rag_seeder = RAGSeeder(args.database_url)
+        if rag_seeder.connect():
+            try:
+                rag_results = rag_seeder.seed_all(dry_run=args.dry_run)
+                all_results.update(rag_results)
+            finally:
+                rag_seeder.close()
+        elif args.rag_only:
+            console.print("[red]RAG seeding requested but DATABASE_URL not available[/red]")
+            sys.exit(1)
 
-    if not seeder.connect():
-        sys.exit(1)
+    # Seed Odoo data unless rag-only
+    if not args.rag_only:
+        if not args.password:
+            console.print("[red]ERROR: ODOO_PASSWORD environment variable or --password required[/red]")
+            sys.exit(1)
 
-    if args.reset and not args.dry_run:
-        seeder.reset_demo_data()
+        seeder = OdooSeeder(args.url, args.db, args.user, args.password)
 
-    results = seeder.seed_all(dry_run=args.dry_run, prod_only=args.prod)
-    print_results(results)
+        if not seeder.connect():
+            sys.exit(1)
 
+        if args.reset and not args.dry_run:
+            seeder.reset_demo_data()
+
+        odoo_results = seeder.seed_all(dry_run=args.dry_run, prod_only=args.prod)
+        all_results.update(odoo_results)
+
+    print_results(all_results)
     console.print("\n[green]Demo data seeding complete![/green]")
 
 
