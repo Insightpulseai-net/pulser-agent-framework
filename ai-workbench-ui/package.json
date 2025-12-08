@@ -1,0 +1,38 @@
+{
+  "name": "ai-workbench-ui",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "next": "14.0.4",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "@supabase/supabase-js": "^2.39.0",
+    "@material/web": "^1.1.0",
+    "reactflow": "^11.10.4",
+    "monaco-editor": "^0.45.0",
+    "@monaco-editor/react": "^4.6.0",
+    "echarts": "^5.4.3",
+    "echarts-for-react": "^3.0.2",
+    "d3": "^7.8.5",
+    "zustand": "^4.4.7",
+    "date-fns": "^3.0.6"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "@types/d3": "^7.4.3",
+    "typescript": "^5",
+    "tailwindcss": "^3.4.0",
+    "postcss": "^8",
+    "autoprefixer": "^10.0.1",
+    "eslint": "^8",
+    "eslint-config-next": "14.0.4"
+  }
+}
