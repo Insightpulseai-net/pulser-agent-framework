@@ -1,0 +1,40 @@
+{
+  "collection_name": "knowledge_base",
+  "vectors": {
+    "size": 1536,
+    "distance": "Cosine"
+  },
+  "hnsw_config": {
+    "m": 16,
+    "ef_construct": 100,
+    "full_scan_threshold": 10000
+  },
+  "optimizers_config": {
+    "deleted_threshold": 0.2,
+    "vacuum_min_vector_number": 1000,
+    "default_segment_number": 0,
+    "max_segment_size": null,
+    "memmap_threshold": null,
+    "indexing_threshold": 20000,
+    "flush_interval_sec": 5,
+    "max_optimization_threads": 1
+  },
+  "payload_schema": {
+    "text": {
+      "type": "text",
+      "indexed": true
+    },
+    "source": {
+      "type": "keyword",
+      "indexed": true
+    },
+    "category": {
+      "type": "keyword",
+      "indexed": true
+    },
+    "created_at": {
+      "type": "integer",
+      "indexed": true
+    }
+  }
+}

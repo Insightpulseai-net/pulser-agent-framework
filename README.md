@@ -1,6 +1,6 @@
 # InsightPulseAI AI Workbench - Complete Stack
 
-Production-ready infrastructure + data layer for self-hosted AI Workbench.
+Production-ready self-hosted AI Workbench with infrastructure, data layer, agent orchestration, and Next.js UI.
 
 ## Overview
 
@@ -28,148 +28,162 @@ Platinum Layer (AI features, embeddings)
 AI Workbench (Genie, Agents, Dashboards)
 ```
 
+### Agent Layer (Multi-Agent Orchestration)
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    AI Workbench Frontend                     │
+│              (Next.js + Material Web)                        │
+└─────────────────────┬───────────────────────────────────────┘
+                      │
+                      ▼
+┌─────────────────────────────────────────────────────────────┐
+│                 Agent Runtime (FastAPI)                      │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│  │   Research   │  │   Expense    │  │ Finance SSC  │      │
+│  │    Agent     │  │  Classifier  │  │    Agent     │      │
+│  └──────────────┘  └──────────────┘  └──────────────┘      │
+└─────────────────────┬───────────────────────────────────────┘
+                      │
+        ┌─────────────┼─────────────┐
+        │             │             │
+        ▼             ▼             ▼
+┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+│   Qdrant     │ │  Langfuse    │ │   LiteLLM    │
+│  (Vectors)   │ │ (Observ.)    │ │  (Gateway)   │
+└──────────────┘ └──────────────┘ └──────────────┘
+```
+
 ## Directory Structure
 
 ```
-data-layer/
-├── dbt-workbench/              # dbt transformation project
-│   ├── models/
-│   │   ├── bronze/             # Raw ingestion models
-│   │   ├── silver/             # Validated models
-│   │   ├── gold/               # Business marts
-│   │   └── platinum/           # AI-ready views
-│   ├── tests/                  # dbt test cases
-│   ├── macros/                 # SQL macros
-│   └── README.md
+archi-agent-framework/
+├── spec-kit/                   # Spec-Driven Development (SDD) bundle
+│   └── spec/ai-workbench/
+│       ├── constitution.md     # System values and constraints
+│       ├── prd.md             # Product Requirements Document
+│       ├── plan.md            # Implementation plan
+│       └── tasks.md           # Task breakdown
 │
-├── airflow/                    # Orchestration DAGs
-│   ├── dags/
-│   │   ├── scout_ingestion_dag.py          # Daily batch ingestion
-│   │   ├── scout_transformation_dag.py     # Hourly transformations
-│   │   ├── data_quality_dag.py             # Daily DQ validation
-│   │   └── backfill_dag.py                 # Historical backfill
-│   └── README.md
+├── infra/                     # Infrastructure Layer
+│   ├── digitalocean/
+│   │   ├── terraform/         # DOKS cluster, VPC, firewall
+│   │   └── kubernetes/        # Namespaces, secrets, network policies
+│   ├── supabase/
+│   │   ├── migrations/        # Metadata + Medallion schemas
+│   │   └── rls-policies/      # Row-Level Security policies
+│   └── helm-values/           # Traefik, n8n configs
 │
-├── n8n-etl/                    # Real-time workflows
-│   ├── workflows/
-│   │   ├── real-time-transactions.json     # Webhook ingestion
-│   │   ├── odoo-sync.json                  # Odoo integration
-│   │   └── quality-alerts.json             # DQ alerting
-│   └── README.md
+├── services/                  # Microservices
+│   ├── litellm-proxy/         # Multi-model AI gateway
+│   ├── n8n/                   # Workflow automation
+│   └── agent-runtime/         # FastAPI agent runtime (agent-layer)
 │
-├── schemas/                    # Schema documentation
-│   ├── bronze_schema.md
-│   ├── silver_schema.md
-│   ├── gold_schema.md
-│   ├── platinum_schema.md
-│   ├── entity_relationships.md
-│   └── README.md
+├── data-layer/                # Medallion Architecture
+│   ├── dbt-workbench/         # Bronze → Silver → Gold → Platinum
+│   ├── airflow/               # DAG orchestration
+│   ├── n8n-etl/               # Real-time workflows
+│   ├── schemas/               # Schema documentation
+│   └── quality/               # Data quality framework
 │
-└── quality/                    # Data quality framework
-    ├── tests/
-    │   ├── row_count_checks.sql
-    │   ├── null_checks.sql
-    │   ├── unique_checks.sql
-    │   └── referential_integrity.sql
-    ├── great_expectations/     # GE suite (future)
-    └── README.md
+├── agent-layer/               # Multi-Agent Orchestration
+│   ├── langgraph-agents/      # Research, Expense, Finance SSC agents
+│   ├── qdrant/                # Vector search
+│   ├── langfuse/              # Observability
+│   ├── safety/                # Safety harnesses
+│   └── bindings/              # Agent → Gold schema bindings
+│
+└── packages/                  # Experience Layer (Next.js UI)
+    └── web/                   # AI Workbench frontend
 ```
->>>>>>> data-layer
 
 ## Quick Start
 
 ### Prerequisites
 
-<<<<<<< HEAD
+**Required Tools**:
 ```bash
-# Install required tools
-brew install doctl terraform kubectl helm postgresql
+# macOS
+brew install doctl terraform kubectl helm postgresql python3 node
 
 # Authenticate with DigitalOcean
 doctl auth init
 
-# Set environment variables
+# Environment Variables
 export DO_TOKEN=$(doctl auth list --format Token --no-header)
 export SUPABASE_URL="https://xkxyvboeubffxxbebsll.supabase.co"
 export SUPABASE_SERVICE_ROLE_KEY="<your-key>"
 export POSTGRES_URL="postgresql://postgres:[password]@aws-1-us-east-1.pooler.supabase.com:6543/postgres"
 ```
 
-### Deploy in Order
+**Python/Node Requirements**:
+- Python 3.11+ (for dbt, Airflow, agent runtime)
+- Node.js 20+ (for Next.js UI, n8n workflows)
+- dbt-postgres, Apache Airflow 2.8+
 
-#### 1. DigitalOcean Infrastructure (20 min)
+### Deployment Sequence
+
+**Total Time**: ~120 minutes (Infrastructure 75min + Data Layer 25min + Agent Layer 20min)
+
+---
+
+### 1. Infrastructure Layer (75 minutes)
+
+#### 1.1 DigitalOcean DOKS Cluster (20 min)
 
 ```bash
 cd infra/digitalocean/terraform/
+terraform init && terraform plan && terraform apply
 
-# Initialize and deploy
-terraform init
-terraform plan
-terraform apply
-
-# Get cluster credentials
+# Get credentials
 doctl kubernetes cluster kubeconfig save $(terraform output -raw cluster_id)
-
-# Verify
-kubectl get nodes
+kubectl get nodes  # Verify 3 nodes running
 ```
 
-See: [`infra/digitalocean/README.md`](infra/digitalocean/README.md)
-
-#### 2. Kubernetes Resources (5 min)
+#### 1.2 Kubernetes Namespaces & Secrets (5 min)
 
 ```bash
 cd ../kubernetes/
-
-# Create namespaces
 kubectl apply -f namespace.yaml
 
-# Configure secrets
 cp secrets.yaml.example secrets.yaml
-# Edit secrets.yaml with real values (DO NOT commit)
+# Edit with real values: SUPABASE_KEY, LITELLM_KEY, N8N_PASSWORD
 kubectl apply -f secrets.yaml
 ```
 
-#### 3. Traefik Ingress (10 min)
+#### 1.3 Traefik Ingress Controller (10 min)
 
 ```bash
-cd ../
-
-# Deploy Traefik
 helm repo add traefik https://traefik.github.io/charts
 helm install traefik traefik/traefik \
   --namespace traefik \
-  --values helm-values/traefik.yaml \
+  --values ../helm-values/traefik.yaml \
   --create-namespace
 
-# Wait for LoadBalancer IP
-kubectl get svc -n traefik --watch
-
+kubectl get svc -n traefik --watch  # Wait for LoadBalancer IP
 # Configure DNS: *.insightpulseai.net → <LoadBalancer-IP>
 ```
 
-#### 4. n8n Workflow Automation (10 min)
+#### 1.4 n8n Workflow Automation (10 min)
 
 ```bash
-# Deploy n8n
 helm repo add 8gears https://8gears.container-registry.com/chartrepo/library
 helm install n8n 8gears/n8n \
   --namespace n8n \
-  --values helm-values/n8n.yaml \
+  --values ../helm-values/n8n.yaml \
   --create-namespace
 
 # Access: https://n8n.insightpulseai.net
 ```
 
-See: [`services/n8n/README.md`](services/n8n/README.md)
-
-#### 5. Supabase Database Schema (15 min)
+#### 1.5 Supabase Database Schemas (15 min)
 
 ```bash
-cd ../../infra/supabase/migrations/
+cd ../../supabase/migrations/
 
-# Run migrations
+# Run metadata schema (18 tables)
 psql "$POSTGRES_URL" -f 001_metadata_schema.sql
+
+# Run medallion schemas (Bronze/Silver/Gold/Platinum)
 psql "$POSTGRES_URL" -f 002_medallion_schemas.sql
 
 # Enable RLS policies
@@ -178,16 +192,15 @@ psql "$POSTGRES_URL" -f workbench_policies.sql
 
 # Verify
 psql "$POSTGRES_URL" -c "\dt ip_workbench.*"
+psql "$POSTGRES_URL" -c "\dn scout"
 ```
 
-See: [`infra/supabase/README.md`](infra/supabase/README.md)
-
-#### 6. LiteLLM Gateway (15 min)
+#### 1.6 LiteLLM Gateway (15 min)
 
 ```bash
 cd ../../../services/litellm-proxy/
 
-# Build and push image
+# Build and push
 docker build -t registry.digitalocean.com/ai-workbench-registry/litellm-gateway:latest .
 doctl registry login
 docker push registry.digitalocean.com/ai-workbench-registry/litellm-gateway:latest
@@ -201,9 +214,156 @@ kubectl get pods -n litellm
 curl https://litellm.insightpulseai.net/health
 ```
 
-See: [`services/litellm-proxy/README.md`](services/litellm-proxy/README.md)
+---
 
-### Total Deployment Time: ~75 minutes
+### 2. Data Layer (25 minutes)
+
+#### 2.1 Configure dbt (5 min)
+
+```bash
+cd ../../data-layer/dbt-workbench
+
+# Install dbt
+pip install dbt-postgres dbt-utils
+
+# Configure profiles
+cp profiles.yml.example ~/.dbt/profiles.yml
+nano ~/.dbt/profiles.yml  # Add POSTGRES_URL, credentials
+
+# Test connection
+dbt debug
+```
+
+#### 2.2 Deploy dbt Models (10 min)
+
+```bash
+# Install dependencies
+dbt deps
+
+# Run Bronze → Silver → Gold → Platinum
+dbt run --models bronze
+dbt run --models silver
+dbt run --models gold
+dbt run --models platinum
+
+# Run tests (must pass ≥80% Silver, 100% Gold)
+dbt test
+```
+
+#### 2.3 Setup Airflow DAGs (10 min)
+
+```bash
+cd ../airflow
+
+# Install Airflow
+pip install apache-airflow==2.8.0 apache-airflow-providers-postgres
+
+# Initialize Airflow DB
+airflow db init
+
+# Copy DAGs
+cp dags/*.py ~/airflow/dags/
+
+# Start Airflow (background)
+airflow webserver -D
+airflow scheduler -D
+
+# Verify DAGs
+airflow dags list
+# Expected: scout_ingestion_dag, scout_transformation_dag, data_quality_dag
+```
+
+---
+
+### 3. Agent Layer (20 minutes)
+
+#### 3.1 Deploy Qdrant Vector Database (5 min)
+
+```bash
+cd ../../agent-layer/qdrant
+docker-compose up -d
+
+# Verify
+curl http://localhost:6333/healthz
+```
+
+#### 3.2 Deploy Langfuse Observability (5 min)
+
+```bash
+cd ../langfuse
+docker-compose up -d
+
+# Access: http://localhost:3000
+# Create account and get API keys
+```
+
+#### 3.3 Deploy Agent Runtime (10 min)
+
+```bash
+cd ../services/agent-runtime
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Set environment variables
+export QDRANT_URL="http://localhost:6333"
+export LANGFUSE_URL="http://localhost:3000"
+export LANGFUSE_PUBLIC_KEY="<from-langfuse-ui>"
+export LANGFUSE_SECRET_KEY="<from-langfuse-ui>"
+export LITELLM_URL="https://litellm.insightpulseai.net"
+export SUPABASE_URL="https://xkxyvboeubffxxbebsll.supabase.co"
+
+# Start FastAPI server
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+# Verify
+curl http://localhost:8000/health
+```
+
+#### 3.4 Ingest Knowledge Base to Qdrant (optional)
+
+```bash
+cd ../../qdrant/ingest
+
+# Chunk documents
+python document_chunker.py --input ../../docs/ --output chunks.json
+
+# Generate embeddings
+python embedding_generator.py --input chunks.json --output embeddings.json
+
+# Upload to Qdrant
+# (embeddings automatically uploaded via Qdrant SDK)
+```
+
+---
+
+### 4. Next.js UI (Experience Layer)
+
+```bash
+cd ../../packages/web
+
+# Install dependencies
+npm install
+
+# Set environment variables
+cp .env.example .env.local
+# Edit .env.local with Supabase and Agent Runtime URLs
+
+# Run dev server
+npm run dev
+
+# Access: http://localhost:3000
+```
+
+---
+
+### Total Deployment Time
+
+- **Infrastructure**: 75 minutes
+- **Data Layer**: 25 minutes
+- **Agent Layer**: 20 minutes
+- **Experience Layer**: 5 minutes
+- **Total**: ~125 minutes
 
 ## Architecture
 
@@ -424,20 +584,47 @@ psql "$POSTGRES_URL" -c "SHOW pool_mode;"
 ### GitHub Actions Example
 
 ```yaml
-# .github/workflows/deploy.yml
+# .github/workflows/deploy-infrastructure.yml
 name: Deploy to DOKS
 
 on:
   push:
     branches: [main]
-=======
+    paths: ['infrastructure/**', 'k8s/**']
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Configure kubectl
+        run: doctl kubernetes cluster kubeconfig save ${{ secrets.CLUSTER_ID }}
+
+      - name: Deploy services
+        run: kubectl apply -f k8s/
+```
+
+---
+
+# Data Layer
+
+Production-grade data orchestration with dbt, Airflow, and n8n integration.
+
+## Prerequisites
+
 - PostgreSQL 15+ (Supabase)
 - Python 3.11+
 - dbt-postgres
 - Apache Airflow 2.8+
 - n8n (self-hosted or cloud)
 
-### Setup
+## Setup
 
 ```bash
 # 1. Clone repository
@@ -688,21 +875,21 @@ aws s3 sync target/ s3://dbt-docs-bucket/ --endpoint-url=https://sgp1.digitaloce
 ### CI/CD Integration
 
 ```yaml
-# GitHub Actions example
+# .github/workflows/deploy-data-layer.yml
 name: Deploy Data Layer
+
 on:
   push:
     branches: [main]
     paths: ['data-layer/**']
->>>>>>> data-layer
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-<<<<<<< HEAD
 
+      # Infrastructure deployment (if needed)
       - name: Install doctl
         uses: digitalocean/action-doctl@v2
         with:
@@ -711,9 +898,26 @@ jobs:
       - name: Configure kubectl
         run: doctl kubernetes cluster kubeconfig save ${{ secrets.CLUSTER_ID }}
 
-      - name: Deploy
+      - name: Deploy infrastructure
         run: kubectl apply -f k8s/
+
+      # Data layer deployment
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dbt
+        run: pip install dbt-postgres
+
+      - name: Run dbt
+        run: |
+          cd dbt-workbench
+          dbt run --target prod
+          dbt test --target prod
 ```
+
+---
 
 ## Next Steps
 
@@ -731,19 +935,8 @@ jobs:
 ## License
 
 Proprietary - InsightPulseAI © 2025
-=======
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-      - name: Install dbt
-        run: pip install dbt-postgres
-      - name: Run dbt
-        run: |
-          cd dbt-workbench
-          dbt run --target prod
-          dbt test --target prod
-```
+
+---
 
 ## Integration Points
 
@@ -877,4 +1070,441 @@ ORDER BY idx_scan DESC;
 - **Issues**: GitHub Issues
 - **Slack**: #data-engineering
 - **Email**: data-engineering@insightpulseai.net
->>>>>>> data-layer
+
+---
+
+# Agent Layer - Multi-Agent Orchestration System
+
+**Purpose**: LangGraph-based multi-agent orchestration with Qdrant vector search, Langfuse observability, and comprehensive safety harnesses.
+
+**Version**: 1.0.0
+**Last Updated**: 2025-12-08
+**Stack**: LangGraph, Qdrant, Langfuse, FastAPI, LiteLLM
+
+---
+
+## Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    AI Workbench Frontend                     │
+│              (Next.js + Material Web)                        │
+└─────────────────────┬───────────────────────────────────────┘
+                      │
+                      ▼
+┌─────────────────────────────────────────────────────────────┐
+│                 Agent Runtime (FastAPI)                      │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│  │   Research   │  │   Expense    │  │ Finance SSC  │      │
+│  │    Agent     │  │  Classifier  │  │    Agent     │      │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘      │
+│         │                  │                  │              │
+│         └──────────────────┼──────────────────┘              │
+│                            ▼                                 │
+│              ┌─────────────────────────┐                     │
+│              │   LangGraph State      │                     │
+│              │   Management Layer     │                     │
+│              └─────────────────────────┘                     │
+└─────────────────────┬───────────────────────────────────────┘
+                      │
+        ┌─────────────┼─────────────┐
+        │             │             │
+        ▼             ▼             ▼
+┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+│   Qdrant     │ │  Langfuse    │ │   LiteLLM    │
+│  (Vectors)   │ │ (Observ.)    │ │  (Gateway)   │
+└──────────────┘ └──────────────┘ └──────────────┘
+        │                               │
+        ▼                               ▼
+┌──────────────┐                 ┌──────────────┐
+│  Supabase    │                 │ Claude/GPT-4 │
+│   (Data)     │                 │   (LLMs)     │
+└──────────────┘                 └──────────────┘
+```
+
+---
+
+## Directory Structure
+
+```
+agent-layer/
+├── langgraph-agents/           # LangGraph agent implementations
+│   ├── agents/
+│   │   ├── research_agent.py   # Multi-step research agent
+│   │   ├── expense_classifier.py  # OCR → category classification
+│   │   └── finance_ssc_agent.py   # BIR form generation
+│   ├── graphs/
+│   │   ├── research_graph.py   # Research workflow graph
+│   │   └── expense_graph.py    # Expense processing graph
+│   ├── tools/
+│   │   ├── supabase_tool.py    # Supabase query tool
+│   │   ├── qdrant_tool.py      # Vector search tool
+│   │   └── odoo_tool.py        # Odoo XML-RPC tool
+│   ├── state/
+│   │   ├── agent_state.py      # State schemas
+│   │   └── message_state.py    # Message handling
+│   └── README.md
+├── qdrant/                     # Vector search setup
+│   ├── collections/
+│   │   └── knowledge_base.json # Collection schema
+│   ├── ingest/
+│   │   ├── document_chunker.py # Document chunking
+│   │   └── embedding_generator.py  # OpenAI embeddings
+│   ├── query/
+│   │   └── semantic_search.py  # Search API
+│   ├── docker-compose.yml      # Qdrant deployment
+│   └── README.md
+├── langfuse/                   # Observability setup
+│   ├── docker-compose.yml      # Langfuse deployment
+│   ├── integrations/
+│   │   ├── litellm.py          # LiteLLM tracing
+│   │   └── langgraph.py        # LangGraph tracing
+│   ├── dashboards/
+│   │   └── cost_dashboard.json # Cost/latency dashboard
+│   ├── alerts/
+│   │   └── budget_alerts.py    # Budget threshold alerts
+│   └── README.md
+├── safety/                     # Safety harnesses
+│   ├── prompt_injection_detector.py  # Injection detection
+│   ├── content_moderator.py    # Content moderation
+│   ├── rate_limiter.py         # Rate limiting
+│   ├── kill_switch.py          # Emergency stop
+│   ├── audit_logger.py         # Security logging
+│   └── README.md
+├── bindings/                   # Agent bindings to Gold schemas
+│   ├── saricoach_binding.py    # SariCoach agent binding
+│   ├── genieview_binding.py    # GenieView NL2SQL binding
+│   ├── schema_mapper.py        # Gold table → context
+│   ├── role_generator.py       # Read-only SQL roles
+│   └── README.md
+├── services/                   # FastAPI runtime
+│   ├── agent-runtime/
+│   │   ├── main.py             # FastAPI app
+│   │   ├── routers/
+│   │   │   ├── agents.py       # Agent execution routes
+│   │   │   └── health.py       # Health check routes
+│   │   ├── requirements.txt
+│   │   └── Dockerfile
+│   └── docker-compose.yml
+├── tests/                      # Integration tests
+│   ├── test_research_agent.py
+│   ├── test_expense_classifier.py
+│   ├── test_safety_harnesses.py
+│   └── test_qdrant_search.py
+├── infra/                      # Infrastructure configs
+│   └── do/
+│       └── agent-runtime.yaml  # DO App Platform spec
+└── README.md
+```
+
+---
+
+## Quick Start
+
+### 1. Deploy Qdrant
+```bash
+cd qdrant
+docker-compose up -d
+```
+
+### 2. Deploy Langfuse
+```bash
+cd langfuse
+docker-compose up -d
+```
+
+### 3. Setup Agent Runtime
+```bash
+cd services/agent-runtime
+pip install -r requirements.txt
+uvicorn main:app --reload
+```
+
+### 4. Ingest Knowledge Base
+```bash
+cd qdrant/ingest
+python document_chunker.py --input docs/ --output chunks.json
+python embedding_generator.py --input chunks.json --output embeddings.json
+```
+
+### 5. Test Agent
+```bash
+curl -X POST http://localhost:8000/api/agents/run \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agent_id": "research-agent",
+    "query": "What are the top expense categories last month?",
+    "user_id": "user-123"
+  }'
+```
+
+---
+
+## Agent Types
+
+### 1. Research Agent
+**Purpose**: Multi-step research with knowledge base retrieval
+
+**Workflow**:
+```
+Entry → Search Qdrant → Fetch Context → Generate Answer → Validate → Retry (if needed)
+```
+
+**Use Cases**:
+- Analyze Scout transaction trends
+- Research BIR filing requirements
+- Compare vendors by expense amounts
+
+### 2. Expense Classifier
+**Purpose**: OCR → category classification with policy validation
+
+**Workflow**:
+```
+Entry → OCR Extract → Validate → Classify Category → Route to Approval → Notify
+```
+
+**Use Cases**:
+- Classify receipts from PaddleOCR-VL
+- Route expenses to correct approval workflow
+- Flag policy violations
+
+### 3. Finance SSC Agent
+**Purpose**: BIR form generation and multi-employee finance operations
+
+**Workflow**:
+```
+Entry → Query Odoo → Aggregate Tax Data → Generate BIR Form → Store → Notify
+```
+
+**Use Cases**:
+- Generate 1601-C monthly
+- Generate 2550Q quarterly
+- Multi-employee tax calculations
+
+---
+
+## Safety Harnesses
+
+### 1. Prompt Injection Detection
+- **Regex Patterns**: 10+ injection patterns
+- **LlamaGuard**: AI-based detection
+- **Action**: Block + audit log
+
+### 2. Content Moderation
+- **OpenAI Moderation API**: Automatic flagging
+- **Categories**: hate, harassment, violence, sexual
+- **Action**: Block + notify admin
+
+### 3. Rate Limiting
+- **Per User**: 100 requests/hour
+- **Global**: 1000 requests/hour
+- **Action**: Return 429 + suggest retry
+
+### 4. Budget Limits
+- **Per Agent**: $1 per run (configurable)
+- **Per Project**: $100/day
+- **Action**: Pause agent + alert
+
+### 5. Kill Switch
+- **Manual**: Admin dashboard button
+- **Auto**: Budget exceeded or rate limit breached
+- **Action**: Stop all agents + notify
+
+---
+
+## Observability
+
+### Langfuse Traces
+**Captured Data**:
+- Input prompt
+- Output response
+- Model used (claude-sonnet-4.5, gpt-4, etc.)
+- Tokens (prompt + completion)
+- Cost (USD)
+- Latency (ms)
+
+**Tags**:
+- `agent_type`: research, expense, finance
+- `user_id`: User identifier
+- `session_id`: Session tracking
+- `environment`: dev, staging, production
+
+**Annotations**:
+- Human feedback (thumbs up/down)
+- Error flags (timeout, rate limit)
+- Quality scores (confidence, relevance)
+
+### Cost Dashboard
+**Metrics**:
+- Total cost today
+- Cost per agent
+- Cost per model
+- Cost per user
+
+**Alerts**:
+- Budget threshold exceeded (email + Mattermost)
+- Unusual spike in cost (auto-investigation)
+- Model failure (fallback triggered)
+
+---
+
+## Agent Bindings
+
+### SariCoach Binding
+**Purpose**: Bind SariCoach agent to Scout gold tables
+
+**Gold Tables**:
+- `gold.finance_expenses`
+- `gold.finance_vendors`
+- `gold.scout_transactions`
+
+**Context**:
+```python
+{
+  "tables": ["gold.finance_expenses"],
+  "columns": ["vendor", "amount", "category", "date"],
+  "filters": ["status = 'approved'", "date > '2025-01-01'"],
+  "aggregations": ["SUM(amount)", "COUNT(*)"]
+}
+```
+
+### GenieView Binding
+**Purpose**: Natural language to SQL (NL2SQL) for Tableau
+
+**Workflow**:
+1. User query: "Show me top 5 vendors by expense amount"
+2. Agent → Qdrant: Find similar queries
+3. Agent → LLM: Generate SQL
+4. Agent → Supabase: Execute SQL
+5. Agent → User: Results + SQL
+
+**SQL Role**:
+```sql
+CREATE ROLE genieview_readonly;
+GRANT SELECT ON gold.* TO genieview_readonly;
+REVOKE INSERT, UPDATE, DELETE ON gold.* FROM genieview_readonly;
+```
+
+---
+
+## Testing
+
+### Unit Tests
+```bash
+pytest tests/test_research_agent.py -v
+pytest tests/test_expense_classifier.py -v
+```
+
+### Integration Tests
+```bash
+pytest tests/ -v --cov=langgraph-agents
+```
+
+### Safety Tests
+```bash
+pytest tests/test_safety_harnesses.py -v
+```
+
+---
+
+## Deployment
+
+### DigitalOcean App Platform
+```bash
+doctl apps create --spec infra/do/agent-runtime.yaml
+```
+
+### Kubernetes (DOKS)
+```bash
+kubectl apply -f k8s/agent-runtime-deployment.yaml
+```
+
+---
+
+## Configuration
+
+### Environment Variables
+```bash
+# Supabase
+export SUPABASE_URL="https://xkxyvboeubffxxbebsll.supabase.co"
+export SUPABASE_SERVICE_ROLE_KEY="..."
+
+# Qdrant
+export QDRANT_URL="http://qdrant:6333"
+
+# Langfuse
+export LANGFUSE_URL="http://langfuse:3000"
+export LANGFUSE_PUBLIC_KEY="..."
+export LANGFUSE_SECRET_KEY="..."
+
+# LiteLLM
+export LITELLM_URL="https://litellm.insightpulseai.net"
+export LITELLM_API_KEY="..."
+
+# Odoo
+export ODOO_URL="https://odoo.insightpulseai.net"
+export ODOO_DB="production"
+export ODOO_USERNAME="admin"
+export ODOO_PASSWORD="..."
+
+# OpenAI (for embeddings + moderation)
+export OPENAI_API_KEY="..."
+```
+
+---
+
+## Performance
+
+### Latency Targets
+- **Agent Execution**: <5s (p95)
+- **Vector Search**: <100ms (p95)
+- **LLM Call**: <3s (p95)
+
+### Throughput
+- **Concurrent Agents**: 50+
+- **Requests/min**: 500+
+- **Vector Searches/s**: 100+
+
+---
+
+## Security
+
+### Authentication
+- API keys (Supabase JWT)
+- Rate limiting per user
+- RLS policies enforced
+
+### Secrets Management
+- Supabase Vault
+- Environment variables only
+- No hardcoded secrets
+
+### Audit Logging
+- All agent runs logged
+- Security events flagged
+- Suspicious activity alerts
+
+---
+
+## Next Steps
+
+1. **T7.1**: Setup LiteLLM Gateway (see `prd.md`)
+2. **T7.2**: Integrate Langfuse
+3. **T7.3**: Build Genie Chat Interface
+4. **T7.4**: Create Agent Registry Page
+5. **T7.5**: Implement Tool Library
+6. **T7.6**: Build LangGraph Agent Runtime
+7. **T7.7**: Create Agent Run Timeline
+8. **T7.8**: Build Cost Tracking Dashboard
+9. **T7.9**: Implement Budget Alerts
+
+---
+
+## References
+
+- [LangGraph Docs](https://langchain-ai.github.io/langgraph/)
+- [Qdrant Docs](https://qdrant.tech/documentation/)
+- [Langfuse Docs](https://langfuse.com/docs)
+- [LiteLLM Docs](https://docs.litellm.ai/)
+- [PRD](../spec-kit/spec/ai-workbench/prd.md)
+- [Tasks](../spec-kit/spec/ai-workbench/tasks.md)
