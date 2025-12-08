@@ -1,0 +1,235 @@
+{
+  "name": "AI Workbench - Pipeline Trigger Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "pipeline-trigger",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT * FROM ip_workbench.pipelines WHERE id = '{{ $json.body.pipeline_id }}'"
+      },
+      "id": "fetch-pipeline",
+      "name": "Fetch Pipeline Definition",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "credentials": {
+        "postgres": {
+          "id": "supabase-postgres",
+          "name": "Supabase PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "table": "ip_workbench.job_runs",
+        "columns": "pipeline_id,status,started_at,triggered_by",
+        "additionalFields": {
+          "returnFields": "id"
+        }
+      },
+      "id": "create-job-run",
+      "name": "Create Job Run Record",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [650, 300],
+      "credentials": {
+        "postgres": {
+          "id": "supabase-postgres",
+          "name": "Supabase PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse pipeline definition\nconst pipeline = $input.first().json;\nconst definition = JSON.parse(pipeline.definition);\nconst steps = definition.nodes || [];\n\n// Extract SQL from each step\nconst sqlSteps = steps\n  .filter(node => node.data && node.data.sql)\n  .sort((a, b) => a.position.y - b.position.y)\n  .map(node => ({\n    step_name: node.data.label,\n    sql: node.data.sql,\n    step_order: steps.indexOf(node) + 1\n  }));\n\nreturn sqlSteps.map(step => ({ json: step }));"
+      },
+      "id": "extract-steps",
+      "name": "Extract Pipeline Steps",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}"
+      },
+      "id": "execute-step",
+      "name": "Execute Pipeline Step",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [1050, 300],
+      "credentials": {
+        "postgres": {
+          "id": "supabase-postgres",
+          "name": "Supabase PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=UPDATE ip_workbench.job_runs SET status = 'completed', completed_at = NOW(), logs = '{{ $json.logs }}' WHERE id = '{{ $json.body.job_run_id }}'"
+      },
+      "id": "update-job-run-success",
+      "name": "Update Job Run (Success)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [1250, 200],
+      "credentials": {
+        "postgres": {
+          "id": "supabase-postgres",
+          "name": "Supabase PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=UPDATE ip_workbench.job_runs SET status = 'failed', completed_at = NOW(), error_message = '{{ $json.error }}' WHERE id = '{{ $json.body.job_run_id }}'"
+      },
+      "id": "update-job-run-failed",
+      "name": "Update Job Run (Failed)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [1250, 400],
+      "credentials": {
+        "postgres": {
+          "id": "supabase-postgres",
+          "name": "Supabase PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"status\": \"success\", \"job_run_id\": $json.body.job_run_id } }}"
+      },
+      "id": "response-success",
+      "name": "Response - Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1450, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"status\": \"failed\", \"error\": $json.error } }}"
+      },
+      "id": "response-failed",
+      "name": "Response - Failed",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1450, 400]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Pipeline Definition",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Pipeline Definition": {
+      "main": [
+        [
+          {
+            "node": "Create Job Run Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Job Run Record": {
+      "main": [
+        [
+          {
+            "node": "Extract Pipeline Steps",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Pipeline Steps": {
+      "main": [
+        [
+          {
+            "node": "Execute Pipeline Step",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Pipeline Step": {
+      "main": [
+        [
+          {
+            "node": "Update Job Run (Success)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "error": [
+        [
+          {
+            "node": "Update Job Run (Failed)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Job Run (Success)": {
+      "main": [
+        [
+          {
+            "node": "Response - Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Job Run (Failed)": {
+      "main": [
+        [
+          {
+            "node": "Response - Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "versionId": "1",
+  "id": "pipeline-trigger-workflow",
+  "meta": {
+    "instanceId": "ai-workbench"
+  },
+  "tags": ["ai-workbench", "pipeline", "etl"]
+}

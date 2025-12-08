@@ -1,0 +1,183 @@
+{
+  "name": "AI Workbench - Expense Approval Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "expense-approval",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT * FROM silver.expenses WHERE id = '{{ $json.body.expense_id }}'"
+      },
+      "id": "fetch-expense",
+      "name": "Fetch Expense from Supabase",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "credentials": {
+        "postgres": {
+          "id": "supabase-postgres",
+          "name": "Supabase PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.amount }}",
+              "operation": "larger",
+              "value2": 5000
+            }
+          ]
+        }
+      },
+      "id": "check-threshold",
+      "name": "Check Approval Threshold",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE gold.finance_expenses SET approval_status = 'approved', approved_by = 'system', approved_at = NOW() WHERE id = '{{ $json.body.expense_id }}'"
+      },
+      "id": "auto-approve",
+      "name": "Auto-Approve (<$5000)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [850, 200],
+      "credentials": {
+        "postgres": {
+          "id": "supabase-postgres",
+          "name": "Supabase PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.MATTERMOST_WEBHOOK_URL }}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "=🔔 Expense Approval Required\n\nVendor: {{ $json.vendor }}\nAmount: ₱{{ $json.amount }}\nCategory: {{ $json.category }}\n\n[Approve](https://workbench.insightpulseai.net/approve/{{ $json.body.expense_id }})"
+            }
+          ]
+        }
+      },
+      "id": "send-notification",
+      "name": "Send Mattermost Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [850, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"status\": \"success\", \"message\": \"Expense approved\", \"expense_id\": $json.body.expense_id } }}"
+      },
+      "id": "response-approved",
+      "name": "Response - Approved",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1050, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"status\": \"pending\", \"message\": \"Approval notification sent\", \"expense_id\": $json.body.expense_id } }}"
+      },
+      "id": "response-pending",
+      "name": "Response - Pending",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1050, 400]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Expense from Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Expense from Supabase": {
+      "main": [
+        [
+          {
+            "node": "Check Approval Threshold",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Approval Threshold": {
+      "main": [
+        [
+          {
+            "node": "Auto-Approve (<$5000)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Mattermost Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auto-Approve (<$5000)": {
+      "main": [
+        [
+          {
+            "node": "Response - Approved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Mattermost Notification": {
+      "main": [
+        [
+          {
+            "node": "Response - Pending",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "versionId": "1",
+  "id": "expense-approval-workflow",
+  "meta": {
+    "instanceId": "ai-workbench"
+  },
+  "tags": ["ai-workbench", "expense", "approval"]
+}

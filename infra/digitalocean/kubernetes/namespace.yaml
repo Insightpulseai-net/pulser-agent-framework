@@ -1,0 +1,82 @@
+# Kubernetes Namespaces for AI Workbench Services
+# Create logical separation for services
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-workbench
+  labels:
+    name: ai-workbench
+    environment: production
+    managed-by: terraform
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: n8n
+  labels:
+    name: n8n
+    environment: production
+    managed-by: helm
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: litellm
+  labels:
+    name: litellm
+    environment: production
+    managed-by: kubectl
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: qdrant
+  labels:
+    name: qdrant
+    environment: production
+    managed-by: helm
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: neo4j
+  labels:
+    name: neo4j
+    environment: production
+    managed-by: helm
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: langfuse
+  labels:
+    name: langfuse
+    environment: production
+    managed-by: kubectl
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: traefik
+  labels:
+    name: traefik
+    environment: production
+    managed-by: helm
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    name: monitoring
+    environment: production
+    managed-by: helm
