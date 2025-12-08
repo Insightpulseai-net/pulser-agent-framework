@@ -1,0 +1,99 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 255 255 255;
+  --foreground: 23 23 23;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: 23 23 23;
+    --foreground: 250 250 250;
+  }
+}
+
+body {
+  color: rgb(var(--foreground));
+  background: rgb(var(--background));
+  font-family: 'Segoe UI', system-ui, sans-serif;
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+/* Microsoft Fluent UI Typography */
+.text-display {
+  @apply text-5xl font-semibold tracking-tight;
+}
+
+.text-title-large {
+  @apply text-4xl font-semibold tracking-tight;
+}
+
+.text-title {
+  @apply text-3xl font-semibold;
+}
+
+.text-subtitle {
+  @apply text-xl font-semibold;
+}
+
+.text-body-large {
+  @apply text-base;
+}
+
+.text-body {
+  @apply text-sm;
+}
+
+.text-caption {
+  @apply text-xs;
+}
+
+/* Fluent UI Card Styles */
+.fluent-card {
+  @apply bg-white dark:bg-neutral-800 rounded-fluent-md shadow-fluent-md border border-neutral-200 dark:border-neutral-700 transition-shadow hover:shadow-fluent-lg;
+}
+
+.fluent-card-interactive {
+  @apply fluent-card cursor-pointer hover:border-brand-500 hover:shadow-brand-500/10;
+}
+
+/* Fluent UI Button Styles */
+.fluent-button-primary {
+  @apply bg-brand-600 hover:bg-brand-700 text-white font-medium px-4 py-2 rounded-fluent transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2;
+}
+
+.fluent-button-secondary {
+  @apply bg-transparent hover:bg-neutral-100 dark:hover:bg-neutral-700 text-neutral-900 dark:text-neutral-100 font-medium px-4 py-2 rounded-fluent border border-neutral-300 dark:border-neutral-600 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2;
+}
+
+/* Status Badge Styles */
+.status-badge {
+  @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+}
+
+.status-success {
+  @apply bg-success-100 text-success-800 dark:bg-success-900 dark:text-success-100;
+}
+
+.status-warning {
+  @apply bg-warning-100 text-warning-800 dark:bg-warning-900 dark:text-warning-100;
+}
+
+.status-error {
+  @apply bg-error-100 text-error-800 dark:bg-error-900 dark:text-error-100;
+}
+
+.status-info {
+  @apply bg-brand-100 text-brand-800 dark:bg-brand-900 dark:text-brand-100;
+}
+
+.status-neutral {
+  @apply bg-neutral-100 text-neutral-800 dark:bg-neutral-800 dark:text-neutral-100;
+}
