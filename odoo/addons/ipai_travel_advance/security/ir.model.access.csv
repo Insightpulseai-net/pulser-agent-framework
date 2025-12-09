@@ -1,0 +1,7 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_travel_request_user,ipai.travel.request.user,model_ipai_travel_request,base.group_user,1,1,1,0
+access_travel_request_manager,ipai.travel.request.manager,model_ipai_travel_request,hr_expense.group_hr_expense_manager,1,1,1,1
+access_travel_itinerary_user,ipai.travel.itinerary.user,model_ipai_travel_itinerary,base.group_user,1,1,1,0
+access_travel_itinerary_manager,ipai.travel.itinerary.manager,model_ipai_travel_itinerary,hr_expense.group_hr_expense_manager,1,1,1,1
+access_travel_per_diem_user,ipai.travel.per.diem.user,model_ipai_travel_per_diem,base.group_user,1,0,0,0
+access_travel_per_diem_manager,ipai.travel.per.diem.manager,model_ipai_travel_per_diem,hr_expense.group_hr_expense_manager,1,1,1,1

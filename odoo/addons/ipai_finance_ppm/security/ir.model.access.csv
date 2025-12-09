@@ -1,0 +1,7 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_ppm_portfolio_user,ipai.ppm.portfolio.user,model_ipai_ppm_portfolio,base.group_user,1,0,0,0
+access_ppm_portfolio_manager,ipai.ppm.portfolio.manager,model_ipai_ppm_portfolio,project.group_project_manager,1,1,1,1
+access_ppm_program_user,ipai.ppm.program.user,model_ipai_ppm_program,base.group_user,1,0,0,0
+access_ppm_program_manager,ipai.ppm.program.manager,model_ipai_ppm_program,project.group_project_manager,1,1,1,1
+access_ppm_project_user,ipai.ppm.project.user,model_ipai_ppm_project,base.group_user,1,0,0,0
+access_ppm_project_manager,ipai.ppm.project.manager,model_ipai_ppm_project,project.group_project_manager,1,1,1,1
