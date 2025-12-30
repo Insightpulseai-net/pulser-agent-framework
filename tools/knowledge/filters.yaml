@@ -1,0 +1,207 @@
+# =============================================================================
+# Knowledge Ingestion Filters
+# =============================================================================
+# Configuration for which files to include/exclude during repo crawling
+# =============================================================================
+
+# File extensions to include (lowercase, with dot)
+include_ext:
+  # Documentation
+  - .md
+  - .mdx
+  - .rst
+  - .txt
+  - .adoc
+
+  # Code - Python
+  - .py
+  - .pyi
+
+  # Code - JavaScript/TypeScript
+  - .ts
+  - .tsx
+  - .js
+  - .jsx
+  - .mjs
+  - .cjs
+
+  # Code - Other
+  - .go
+  - .java
+  - .kt
+  - .rs
+  - .rb
+  - .php
+  - .cs
+  - .cpp
+  - .c
+  - .h
+  - .hpp
+
+  # Config/Data
+  - .sql
+  - .yml
+  - .yaml
+  - .json
+  - .toml
+  - .ini
+  - .cfg
+  - .conf
+
+  # Shell/DevOps
+  - .sh
+  - .bash
+  - .zsh
+  - .dockerfile
+  - .env.example
+
+  # Web
+  - .html
+  - .css
+  - .scss
+  - .less
+  - .vue
+  - .svelte
+
+# Directories to always exclude
+exclude_dir:
+  # Version control
+  - .git
+  - .svn
+  - .hg
+
+  # Dependencies
+  - node_modules
+  - vendor
+  - bower_components
+  - packages
+  - .npm
+  - .yarn
+
+  # Build artifacts
+  - dist
+  - build
+  - out
+  - target
+  - bin
+  - obj
+  - .next
+  - .nuxt
+  - .turbo
+  - .output
+
+  # Python
+  - .venv
+  - venv
+  - env
+  - __pycache__
+  - .eggs
+  - .tox
+  - .nox
+  - .pytest_cache
+  - .mypy_cache
+  - .ruff_cache
+
+  # IDE
+  - .idea
+  - .vscode
+  - .eclipse
+
+  # Test/Coverage
+  - coverage
+  - htmlcov
+  - .coverage
+
+  # OS
+  - .DS_Store
+  - Thumbs.db
+
+  # Cache
+  - .cache
+  - .parcel-cache
+
+# Path substrings to exclude (anywhere in path)
+exclude_path_contains:
+  - /generated/
+  - /vendor/
+  - /third_party/
+  - /minified/
+  - /bundled/
+  - /.github/ISSUE_TEMPLATE/
+  - /node_modules/
+  - /__snapshots__/
+  - /fixtures/
+  - /testdata/
+  - /test_data/
+  - /mock/
+  - /mocks/
+  - /.yarn/
+  - /migrations/
+  - /assets/
+  - /static/
+  - /public/images/
+  - /docs/api/  # Auto-generated API docs
+
+# Maximum file size in bytes (skip larger files)
+max_file_bytes: 800000  # ~800KB
+
+# Chunking settings
+chunk_tokens: 650       # Target tokens per chunk
+chunk_overlap: 80       # Overlap between chunks
+
+# Special file names to always include (regardless of extension)
+include_files:
+  - Dockerfile
+  - Makefile
+  - Justfile
+  - Procfile
+  - requirements.txt
+  - pyproject.toml
+  - package.json
+  - tsconfig.json
+  - docker-compose.yml
+  - docker-compose.yaml
+  - .env.example
+  - .env.sample
+  - LICENSE
+  - CHANGELOG.md
+  - CONTRIBUTING.md
+
+# Repos configuration (can be overridden by REPOS_JSON env var)
+default_repos:
+  # Odoo ecosystem
+  - repo: "odoo/odoo"
+    url: "https://github.com/odoo/odoo.git"
+    ref: "18.0"
+
+  - repo: "OCA/account-financial-tools"
+    url: "https://github.com/OCA/account-financial-tools.git"
+    ref: "18.0"
+
+  - repo: "OCA/account-invoicing"
+    url: "https://github.com/OCA/account-invoicing.git"
+    ref: "18.0"
+
+  # Documentation sources
+  - repo: "microsoft/azure-docs"
+    url: "https://github.com/MicrosoftDocs/azure-docs.git"
+    ref: "main"
+
+  # Agent frameworks
+  - repo: "anthropics/anthropic-cookbook"
+    url: "https://github.com/anthropics/anthropic-cookbook.git"
+    ref: "main"
+
+  - repo: "microsoft/agent-framework"
+    url: "https://github.com/microsoft/agent-framework.git"
+    ref: "main"
+
+  # Analytics
+  - repo: "apache/superset"
+    url: "https://github.com/apache/superset.git"
+    ref: "master"
+
+  # Automation
+  - repo: "n8n-io/n8n"
+    url: "https://github.com/n8n-io/n8n.git"
+    ref: "master"

@@ -1,0 +1,396 @@
+# =============================================================================
+# InsightPulseAI Technology Stack Manifest
+# =============================================================================
+# Machine-readable specification of frameworks, tools, and stack used
+# in the Pulser Agent Framework and Docs2Code Pipeline.
+#
+# Use with Docs2Code pipeline for consistent code generation.
+# =============================================================================
+
+version: "1.0.0"
+updated: "2025-12-30"
+
+# =============================================================================
+# Product / Spec / Agent Frameworks
+# =============================================================================
+agent_frameworks:
+  - name: github-spec-kit
+    description: Constitution/spec/plan/tasks workflow for specification-driven development
+    url: https://github.com/github/spec-kit
+    patterns:
+      - constitution
+      - specification
+      - plan
+      - tasks
+
+  - name: microsoft-agent-framework
+    description: Multi-agent orchestration patterns
+    url: https://github.com/microsoft/agent-framework
+    patterns:
+      - graph-based-workflow
+      - streaming
+      - checkpointing
+      - human-in-the-loop
+
+  - name: anthropic-skills
+    description: Skill-style modular tasks and reusable tooling
+    url: https://github.com/anthropics/skills
+    patterns:
+      - skill.md
+      - examples/
+      - eval/
+
+  - name: docs2code-pipeline
+    description: Paper2Code-inspired 3-stage documentation to code pipeline
+    stages:
+      - planning
+      - analysis
+      - codegen
+      - validation
+
+# =============================================================================
+# Documentation Sources (Inputs)
+# =============================================================================
+documentation_sources:
+  - name: microsoft-learn
+    url: https://learn.microsoft.com
+    types:
+      - architecture-guides
+      - service-docs
+      - quickstarts
+
+  - name: sap-help-portal
+    url: https://help.sap.com
+    types:
+      - config-guides
+      - data-models
+      - customizing-tables
+
+  - name: github-repos
+    patterns:
+      - README.md
+      - docs/
+      - examples/
+      - configs/
+
+  - name: odoo-docs
+    url: https://www.odoo.com/documentation/18.0
+    versions:
+      - "18.0"
+
+  - name: figma-dev
+    url: https://developers.figma.com
+    types:
+      - plugin-api
+      - design-tokens
+      - components
+
+# =============================================================================
+# UI Frameworks (Swappable Theme Targets)
+# =============================================================================
+ui_frameworks:
+  - name: fluent-ui
+    package: "@fluentui/react-components"
+    version: "^9.x"
+    provider: microsoft
+    design_system: fluent-2
+
+  - name: sap-fiori
+    package: "@ui5/webcomponents"
+    version: "^2.x"
+    provider: sap
+    design_system: fiori
+
+  - name: odoo-web
+    package: "@odoo/owl"
+    version: "18.0"
+    provider: odoo
+    design_system: odoo
+
+  - name: material-ui
+    package: "@mui/material"
+    version: "^5.x"
+    provider: google
+    design_system: material-3
+
+  - name: ant-design
+    package: "antd"
+    version: "^5.x"
+    provider: ant
+    design_system: ant
+
+# Theme abstraction via CSS variables
+theme_strategy:
+  method: css-variables
+  runtime_switching: true
+  token_format: json
+  categories:
+    - colors
+    - typography
+    - spacing
+    - shadows
+    - border-radius
+
+# =============================================================================
+# Design to Code Tooling
+# =============================================================================
+design_tools:
+  - name: figma
+    features:
+      - dev-mode
+      - plugin-api
+      - design-tokens
+
+  - name: figma-plugin-custom
+    description: InsightPulseAI Docs2Code Figma Plugin
+    features:
+      - token-extraction
+      - component-analysis
+      - code-generation
+
+  - name: anima
+    description: Figma-to-code accelerator (optional)
+    outputs:
+      - react
+      - html
+      - vue
+
+# =============================================================================
+# Application Stack (Default Implementation)
+# =============================================================================
+application_stack:
+  frontend:
+    framework: next.js
+    version: "^14.x"
+    language: typescript
+    styling:
+      - tailwindcss
+      - css-modules
+    ui_kit: configurable  # See ui_frameworks
+
+  backend:
+    framework: fastapi
+    version: "^0.110"
+    language: python
+    features:
+      - docs2code-services
+      - codegen-endpoints
+      - rag-search
+
+  database:
+    primary:
+      name: postgresql
+      version: "15+"
+      provider: supabase
+      features:
+        - pgvector
+        - rls
+        - realtime
+    cache:
+      name: redis
+      version: "7+"
+
+  auth:
+    methods:
+      - jwt
+      - oauth2
+    providers:
+      - supabase-auth
+      - custom-jwt
+
+# =============================================================================
+# ERP / Business Logic Layer
+# =============================================================================
+erp:
+  core:
+    name: odoo
+    version: "18.0"
+    edition: community
+    url: https://github.com/odoo/odoo
+
+  extensions:
+    name: oca
+    version: "18.0"
+    url: https://github.com/OCA
+    priority_modules:
+      - account-financial-tools
+      - account-invoicing
+      - hr-payroll
+      - l10n-ph
+
+  custom_modules:
+    strategy: minimal  # Only when CE + OCA don't cover
+    naming_convention: "insightpulseai_*"
+    priority: last
+
+  localization:
+    country: philippines
+    compliance:
+      - bir-tax-forms
+      - sss-contributions
+      - philhealth
+      - pagibig
+      - 13th-month-bonus
+
+# =============================================================================
+# Automation / Workflow
+# =============================================================================
+automation:
+  primary:
+    name: n8n
+    version: "1.x"
+    use_cases:
+      - docs-github-sync
+      - notifications
+      - data-pipelines
+
+  secondary:
+    name: power-automate
+    use_cases:
+      - microsoft-ecosystem-integrations
+
+  messaging:
+    name: mattermost
+    replaces: slack
+
+# =============================================================================
+# Analytics / BI
+# =============================================================================
+analytics:
+  primary:
+    name: apache-superset
+    version: "3.x"
+    hosting: self-hosted
+    features:
+      - sql-datasets
+      - chart-builder
+      - dashboards
+      - alerts
+
+  patterns:
+    - power-bi-style-ui
+    - executive-dashboards
+
+# =============================================================================
+# Infrastructure / Deployment / Ops
+# =============================================================================
+infrastructure:
+  containerization:
+    tool: docker
+    orchestration: docker-compose
+    files:
+      - docker-compose.base.yml
+      - docker-compose.dev.yml
+      - docker-compose.prod.yml
+
+  reverse_proxy:
+    name: nginx
+    features:
+      - ssl-termination
+      - load-balancing
+
+  ci_cd:
+    name: github-actions
+    workflows:
+      - ci-python.yml
+      - comprehensive-tests.yml
+      - docker-publish.yml
+      - knowledge-ingest.yml
+
+  cloud:
+    primary:
+      name: digitalocean
+      region: sgp1
+      services:
+        - droplets
+        - app-platform
+        - managed-databases
+
+    enterprise_pattern:
+      name: azure-landing-zone
+      iac: terraform
+      services:
+        - app-service
+        - container-instances
+        - postgresql-flexible
+
+  monitoring:
+    observability: opentelemetry
+    metrics: prometheus
+    dashboards: grafana
+    logs: loki
+
+# =============================================================================
+# Repository / Dev Tooling
+# =============================================================================
+dev_tooling:
+  vcs:
+    name: github
+    features:
+      - pull-requests
+      - actions
+      - code-owners
+      - branch-protection
+
+  security:
+    scanner: codeql
+    secret_scanning: enabled
+
+  testing:
+    python:
+      framework: pytest
+      coverage_target: 85%
+
+    odoo:
+      frameworks:
+        - TransactionCase
+        - HttpCase
+        - js-tours
+
+    frontend:
+      e2e: playwright
+      unit: vitest
+
+  linting:
+    python:
+      - ruff
+      - mypy
+    typescript:
+      - eslint
+      - prettier
+
+# =============================================================================
+# Knowledge Pipeline (RAG + Skills)
+# =============================================================================
+knowledge_pipeline:
+  storage:
+    database: supabase
+    vector_extension: pgvector
+    embedding_dimension: 1536
+
+  embedding:
+    provider: openai
+    model: text-embedding-3-small
+    batch_size: 64
+
+  ingestion:
+    tool: tools/knowledge/ingest_repos.py
+    schedule: weekly
+    sources: default_repos
+
+  skills:
+    builder: tools/knowledge/build_skills.py
+    output: skills/
+    format: anthropic-skills
+
+# =============================================================================
+# Core Principle (User-Defined)
+# =============================================================================
+core_principle:
+  description: >
+    Rule of thumb: Odoo 18 CE first, then exploit OCA modules through add-ons,
+    creating minimal custom modules only if unavailable.
+  priorities:
+    - odoo_ce: 80%
+    - oca_modules: 15%
+    - custom_modules: 5%

@@ -20,7 +20,7 @@
 
 name: Sync Google Docs to Repository
 
-'on':
+on:
   schedule:
     # Run every hour at minute 15
     - cron: '15 * * * *'

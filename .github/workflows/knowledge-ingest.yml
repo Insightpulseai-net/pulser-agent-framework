@@ -1,0 +1,152 @@
+# =============================================================================
+# Knowledge Base Ingestion Workflow
+# =============================================================================
+# Crawls configured GitHub repos, chunks content, generates embeddings,
+# and stores in Supabase pgvector for RAG + skill generation.
+#
+# Schedule: Weekly on Mondays at 02:00 UTC
+# Manual: workflow_dispatch with optional repo override
+# =============================================================================
+
+name: Knowledge Ingestion
+
+on:
+  workflow_dispatch:
+    inputs:
+      repos_json:
+        description: 'JSON array of repos to ingest (optional, uses default if empty)'
+        required: false
+        type: string
+      filters_yaml:
+        description: 'Path to filters config (default: tools/knowledge/filters.yaml)'
+        required: false
+        default: 'tools/knowledge/filters.yaml'
+        type: string
+
+  schedule:
+    # Run weekly on Mondays at 02:00 UTC
+    - cron: '0 2 * * 1'
+
+env:
+  PYTHON_VERSION: '3.11'
+  FILTERS_YAML: 'tools/knowledge/filters.yaml'
+
+jobs:
+  ingest:
+    name: Ingest Repositories
+    runs-on: ubuntu-latest
+    timeout-minutes: 120  # 2 hours max
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: tools/knowledge/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r tools/knowledge/requirements.txt
+
+      - name: Configure Git
+        run: |
+          git config --global user.email "bot@insightpulseai.net"
+          git config --global user.name "Knowledge Bot"
+
+      - name: Run ingestion
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_EMBEDDING_MODEL: 'text-embedding-3-small'
+          REPOS_JSON: ${{ inputs.repos_json || vars.REPOS_JSON || '' }}
+          FILTERS_YAML: ${{ inputs.filters_yaml || env.FILTERS_YAML }}
+          EMBED_BATCH_SIZE: '32'
+        run: |
+          python tools/knowledge/ingest_repos.py
+
+      - name: Query stats
+        if: always()
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          python -c "
+          import os
+          from supabase import create_client
+          sb = create_client(os.environ['SUPABASE_URL'], os.environ['SUPABASE_SERVICE_ROLE_KEY'])
+          result = sb.table('knowledge_docs').select('repo', 'count', count='exact').execute()
+          print(f'Total docs in knowledge base: {result.count}')
+          chunks = sb.table('knowledge_chunks').select('id', count='exact').execute()
+          print(f'Total chunks: {chunks.count}')
+          "
+
+      - name: Post summary
+        run: |
+          echo "## Knowledge Ingestion Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Workflow:** ${{ github.workflow }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Run ID:** ${{ github.run_id }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Triggered by:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Check Supabase dashboard for detailed stats." >> $GITHUB_STEP_SUMMARY
+
+  build-skills:
+    name: Build Skills (Optional)
+    runs-on: ubuntu-latest
+    needs: ingest
+    if: github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r tools/knowledge/requirements.txt
+
+      - name: Build skills from knowledge base
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          python tools/knowledge/build_skills.py || echo "Skill builder not yet implemented"
+
+      - name: Create PR with new skills
+        if: success()
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: 'feat(skills): auto-generate skills from knowledge base'
+          title: '[Skills] Auto-generated skills from knowledge ingestion'
+          body: |
+            ## Automated Skills Generation
+
+            This PR contains skills auto-generated from the knowledge base.
+
+            ### Changes
+            - Generated skill files in `skills/` directory
+            - Updated skill index
+
+            ### Review Checklist
+            - [ ] Review generated skill content
+            - [ ] Verify examples are accurate
+            - [ ] Check source attributions
+          branch: skills/auto-${{ github.run_number }}
+          labels: |
+            skills
+            automated
+          draft: true
