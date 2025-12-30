@@ -1,7 +1,7 @@
 # .github/workflows/schema-sync.yml
 name: Schema & Docs in Sync
 
-'on':
+on:
   pull_request:
 
 jobs:

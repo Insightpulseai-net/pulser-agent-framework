@@ -1,7 +1,7 @@
 # .github/workflows/ci-python.yml
 name: CI - Python
 
-'on':
+on:
   push:
     branches: [main]
   pull_request:

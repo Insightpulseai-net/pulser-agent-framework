@@ -1,7 +1,7 @@
 # .github/workflows/publish-python.yml
 name: Publish Python Package
 
-'on':
+on:
   release:
     types: [published]
 
