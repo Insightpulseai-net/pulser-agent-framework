@@ -1,0 +1,685 @@
+# =============================================================================
+# PARITY CHECKLIST CONFIGURATION
+# =============================================================================
+# AFC Close Manager - SAP AFC / GRC / Signavio Parity Tracking
+# Tracks feature parity against enterprise reference implementations
+# =============================================================================
+
+version: 1
+
+meta:
+  product: AFC Close Manager
+  target: Odoo CE 18 + OCA
+  version: 1.0.0
+  baseline_refs:
+    - SAP_AFC
+    - SAP_GRC
+    - SAP_SIGNAVIO
+    - SOX_404
+    - BIR_COMPLIANCE
+
+scoring:
+  weights:
+    core: 3
+    important: 2
+    nice: 1
+  status_points:
+    done: 1.0
+    partial: 0.5
+    planned: 0.2
+    no: 0.0
+
+# Reference frameworks for parity tracking
+frameworks:
+  sap_afc:
+    label: "SAP Advanced Financial Closing"
+    refs:
+      - "https://help.sap.com/docs/SAP_S4HANA_CLOUD/financial-closing"
+    notes: "Close orchestration, task management, evidence tracking"
+
+  sap_grc:
+    label: "SAP GRC Access Control"
+    refs:
+      - "https://help.sap.com/docs/SAP_ACCESS_CONTROL"
+    notes: "SoD matrix, access reviews, emergency access"
+
+  sap_signavio:
+    label: "SAP Signavio Process Intelligence"
+    refs:
+      - "https://help.sap.com/docs/signavio"
+    notes: "Process mining, conformance, bottleneck detection"
+
+  bir_compliance:
+    label: "BIR Philippine Tax Compliance"
+    refs:
+      - "https://www.bir.gov.ph/"
+    notes: "eFPS, BIR forms, withholding, VAT"
+
+  sox_404:
+    label: "SOX 404 Internal Controls"
+    refs:
+      - "https://www.sec.gov/rules/final/33-8238.htm"
+    notes: "ICFR, evidence, audit trails"
+
+# Capability groups
+capability_groups:
+  - id: close_orchestration
+    title: "Close Orchestration & Workflow"
+  - id: controls
+    title: "Finance Controls & Validation"
+  - id: evidence
+    title: "Evidence & Audit Readiness"
+  - id: intercompany
+    title: "Intercompany Settlement"
+  - id: ph_localization
+    title: "Philippine Localization (BIR)"
+  - id: sod
+    title: "Separation of Duties"
+  - id: access_governance
+    title: "Access Governance"
+  - id: copilot
+    title: "RAG AI Copilot"
+  - id: process_intel
+    title: "Process Intelligence"
+  - id: ui
+    title: "Close Cockpit UI"
+
+# =============================================================================
+# CAPABILITY ITEMS
+# =============================================================================
+
+items:
+  # -------------------------------------------------------------------------
+  # CLOSE ORCHESTRATION & WORKFLOW
+  # -------------------------------------------------------------------------
+  - id: close.calendar_state_machine
+    group: close_orchestration
+    name: "Close calendar state machine (Draft → Active → In Progress → Completed → Locked)"
+    priority: core
+    frameworks: [sap_afc]
+    acceptance:
+      - "Multi-company fiscal period tracking"
+      - "State transitions enforce business rules"
+      - "Period locking prevents retroactive changes"
+    evidence_hint:
+      - "Screenshot of calendar state machine"
+      - "Link to model definition"
+    owner: "platform"
+
+  - id: close.task_templates
+    group: close_orchestration
+    name: "Closing task template library + auto-generation"
+    priority: core
+    frameworks: [sap_afc]
+    acceptance:
+      - "Template library for recurring close tasks"
+      - "Auto-generate tasks from templates per period"
+      - "Assignment with priority levels (Low/Medium/High)"
+    owner: "platform"
+
+  - id: close.task_dependencies
+    group: close_orchestration
+    name: "Task dependency graph (DAG) + critical path"
+    priority: core
+    frameworks: [sap_afc]
+    acceptance:
+      - "Block posting/locking until upstream tasks complete"
+      - "Critical path calculation"
+      - "'What's blocking close' view"
+    owner: "platform"
+
+  - id: close.sla_escalation
+    group: close_orchestration
+    name: "SLA rules + escalation ladder"
+    priority: important
+    frameworks: [sap_afc]
+    acceptance:
+      - "Due date policies per task type"
+      - "Escalation: Reviewer → Approver → Executive"
+      - "Notification channels: Odoo inbox + email + Slack"
+    owner: "platform"
+
+  - id: close.signoff_chain
+    group: close_orchestration
+    name: "Sign-off chain (Preparer/Reviewer/Approver)"
+    priority: core
+    frameworks: [sap_afc, sox_404]
+    acceptance:
+      - "E-signature with timestamp"
+      - "Immutable attestation records"
+      - "RACI per phase"
+    owner: "platform"
+
+  # -------------------------------------------------------------------------
+  # FINANCE CONTROLS & VALIDATION
+  # -------------------------------------------------------------------------
+  - id: controls.gl_balance_validation
+    group: controls
+    name: "GL posting balance validation (Debit = Credit)"
+    priority: core
+    frameworks: [sap_afc]
+    acceptance:
+      - "Automatic balance check before posting"
+      - "Reject unbalanced entries"
+    owner: "platform"
+
+  - id: controls.accruals_engine
+    group: controls
+    name: "Accruals engine (recurring + reversal journals)"
+    priority: important
+    frameworks: [sap_afc]
+    acceptance:
+      - "Template library for accruals"
+      - "Auto-reversal on period open"
+    owner: "platform"
+
+  - id: controls.fx_revaluation
+    group: controls
+    name: "FX revaluation (bank, AR/AP, multi-currency)"
+    priority: important
+    frameworks: [sap_afc]
+    acceptance:
+      - "Configurable FX rate sources"
+      - "Audit-friendly basis and posting rules"
+    owner: "platform"
+
+  - id: controls.reconciliation_hooks
+    group: controls
+    name: "Auto-reconciliation workflow hooks (bank, AR/AP, IC)"
+    priority: important
+    frameworks: [sap_afc]
+    acceptance:
+      - "Bank statement reconciliation status gating"
+      - "AR/AP aging variance checks"
+      - "Must be reconciled before lock"
+    owner: "platform"
+
+  - id: controls.variance_analysis
+    group: controls
+    name: "Variance analysis (TB vs prior/budget)"
+    priority: important
+    frameworks: [sap_afc]
+    acceptance:
+      - "Materiality thresholds"
+      - "Auto-create investigation tasks"
+    owner: "platform"
+
+  - id: controls.fiscal_lock
+    group: controls
+    name: "Fiscal lock integration with Odoo lock dates"
+    priority: core
+    frameworks: [sap_afc]
+    acceptance:
+      - "Lock by journal/account/date range"
+      - "Controlled reopen workflow"
+    owner: "platform"
+
+  # -------------------------------------------------------------------------
+  # EVIDENCE & AUDIT READINESS
+  # -------------------------------------------------------------------------
+  - id: evidence.document_tracking
+    group: evidence
+    name: "Document upload + retention tracking"
+    priority: core
+    frameworks: [sox_404]
+    acceptance:
+      - "Link evidence to tasks/calendars"
+      - "Retention period tracking"
+      - "Compliance framework mapping"
+    owner: "platform"
+
+  - id: evidence.close_package
+    group: evidence
+    name: "Close Package Generator (one-click export)"
+    priority: core
+    frameworks: [sap_afc, sox_404]
+    acceptance:
+      - "TB snapshot, key reports, BIR outputs"
+      - "IC settlement pack, sign-off sheet"
+      - "PDF bundle + ZIP with structured filenames"
+    owner: "platform"
+
+  - id: evidence.completeness_scoring
+    group: evidence
+    name: "Evidence completeness scoring per task"
+    priority: important
+    frameworks: [sox_404]
+    acceptance:
+      - "Required artifacts present check"
+      - "Signed/versioned status"
+      - "Missing evidence queue for auditors"
+    owner: "platform"
+
+  - id: evidence.attachment_hashing
+    group: evidence
+    name: "Attachment hashing (SHA256) + tamper detection"
+    priority: important
+    frameworks: [sox_404]
+    acceptance:
+      - "Hash computed on upload"
+      - "Immutable log entry"
+      - "Tamper alert if hash mismatch"
+    owner: "platform"
+
+  - id: evidence.tb_snapshots
+    group: evidence
+    name: "Trial Balance snapshots per close stage"
+    priority: core
+    frameworks: [sap_afc]
+    acceptance:
+      - "Snapshot at start, milestones, lock"
+      - "Change delta between snapshots"
+      - "Drift comparison"
+    owner: "platform"
+
+  # -------------------------------------------------------------------------
+  # INTERCOMPANY SETTLEMENT
+  # -------------------------------------------------------------------------
+  - id: ic.transaction_tracking
+    group: intercompany
+    name: "IC transaction tracking (bidirectional)"
+    priority: core
+    frameworks: [sap_afc]
+    acceptance:
+      - "Auto-detect IC transactions"
+      - "Partner mapping"
+    owner: "platform"
+
+  - id: ic.netting
+    group: intercompany
+    name: "IC netting + auto-invoice generation"
+    priority: important
+    frameworks: [sap_afc]
+    acceptance:
+      - "Netting rules + tolerance thresholds"
+      - "FX rounding policy"
+      - "Auto-generate IC invoices"
+    owner: "platform"
+
+  - id: ic.matching_rules
+    group: intercompany
+    name: "IC matching rules + dispute workflow"
+    priority: important
+    frameworks: [sap_afc]
+    acceptance:
+      - "Exception handling workflow"
+      - "Comments, attachments, owner, due date"
+    owner: "platform"
+
+  - id: ic.elimination_pack
+    group: intercompany
+    name: "IC elimination pack export"
+    priority: important
+    frameworks: [sap_afc]
+    acceptance:
+      - "TB lines + mapping for consolidation"
+      - "Net position by entity"
+      - "IC disputes aging"
+    owner: "platform"
+
+  # -------------------------------------------------------------------------
+  # PHILIPPINE LOCALIZATION (BIR)
+  # -------------------------------------------------------------------------
+  - id: ph.bir_1601c
+    group: ph_localization
+    name: "BIR Form 1601-C (Monthly Withholding)"
+    priority: core
+    frameworks: [bir_compliance]
+    acceptance:
+      - "Form generation + PDF output"
+      - "GL account mapping"
+      - "Submission tracking"
+    owner: "localization"
+
+  - id: ph.bir_2550q
+    group: ph_localization
+    name: "BIR Form 2550-Q (Quarterly VAT)"
+    priority: core
+    frameworks: [bir_compliance]
+    acceptance:
+      - "VAT output vs input tie-out"
+      - "GL mapping validation"
+    owner: "localization"
+
+  - id: ph.bir_2550m
+    group: ph_localization
+    name: "BIR Form 2550-M (Monthly VAT)"
+    priority: important
+    frameworks: [bir_compliance]
+    acceptance:
+      - "Monthly VAT computation"
+      - "eFPS integration"
+    owner: "localization"
+
+  - id: ph.bir_1702
+    group: ph_localization
+    name: "BIR Form 1702 (Corporate Annual ITR)"
+    priority: core
+    frameworks: [bir_compliance]
+    acceptance:
+      - "Annual income tax return"
+      - "Progressive tax brackets"
+    owner: "localization"
+
+  - id: ph.tax_engine
+    group: ph_localization
+    name: "Tax calculation engine (2024 brackets)"
+    priority: core
+    frameworks: [bir_compliance]
+    acceptance:
+      - "Progressive tax brackets"
+      - "Senior/PWD exemptions"
+      - "Historical rate support (2020-2023)"
+    owner: "localization"
+
+  - id: ph.ebirforms
+    group: ph_localization
+    name: "eBIRForms integration + submission tracking"
+    priority: important
+    frameworks: [bir_compliance]
+    acceptance:
+      - "Submission ID tracking"
+      - "Amendment workflow"
+      - "Draft → Review → Submitted → Archived"
+    owner: "localization"
+
+  - id: ph.gl_mapping
+    group: ph_localization
+    name: "GL account-to-BIR form line mapping"
+    priority: core
+    frameworks: [bir_compliance]
+    acceptance:
+      - "Bidirectional mapping"
+      - "Drill-down from BIR totals to move lines"
+      - "Version control per company"
+    owner: "localization"
+
+  - id: ph.withholding_certs
+    group: ph_localization
+    name: "Withholding certificates generation (2307)"
+    priority: important
+    frameworks: [bir_compliance]
+    acceptance:
+      - "Vendor/employee withholding certs"
+      - "Alphalist attachments"
+    owner: "localization"
+
+  # -------------------------------------------------------------------------
+  # SEPARATION OF DUTIES
+  # -------------------------------------------------------------------------
+  - id: sod.rbac
+    group: sod
+    name: "Role-Based Access Control (8 predefined roles)"
+    priority: core
+    frameworks: [sap_grc]
+    acceptance:
+      - "Preparer, Reviewer, Approver, Executive, Auditor roles"
+      - "Role assignment UI"
+    owner: "platform"
+
+  - id: sod.four_eyes
+    group: sod
+    name: "Four-Eyes Principle enforcement"
+    priority: core
+    frameworks: [sap_grc, sox_404]
+    acceptance:
+      - "Preparer ≠ Approver constraint"
+      - "Hard-coded enforcement"
+    owner: "platform"
+
+  - id: sod.conflict_matrix
+    group: sod
+    name: "SoD conflict detection matrix"
+    priority: core
+    frameworks: [sap_grc]
+    acceptance:
+      - "Seeded critical conflicts library"
+      - "Severity levels (Critical/High/Medium/Low)"
+      - "Real-time detection"
+    owner: "platform"
+
+  - id: sod.audit_trail
+    group: sod
+    name: "Immutable audit trail (SOX 404 compliant)"
+    priority: core
+    frameworks: [sox_404]
+    acceptance:
+      - "User, IP, timestamp, field changes"
+      - "Hash-chained records (tamper-evident)"
+      - "No update/delete allowed"
+    owner: "platform"
+
+  - id: sod.exception_workflow
+    group: sod
+    name: "SoD exception/waiver workflow"
+    priority: important
+    frameworks: [sap_grc]
+    acceptance:
+      - "Business justification required"
+      - "Expiry date"
+      - "Management approval"
+    owner: "platform"
+
+  - id: sod.compensating_controls
+    group: sod
+    name: "Compensating controls as first-class objects"
+    priority: important
+    frameworks: [sap_grc, sox_404]
+    acceptance:
+      - "Description, frequency, owner, evidence"
+      - "Testing schedule"
+      - "Tie to specific conflicts + users"
+    owner: "platform"
+
+  # -------------------------------------------------------------------------
+  # ACCESS GOVERNANCE
+  # -------------------------------------------------------------------------
+  - id: access.quarterly_review
+    group: access_governance
+    name: "Quarterly access review campaigns"
+    priority: core
+    frameworks: [sap_grc]
+    acceptance:
+      - "Compare user roster vs HR active list"
+      - "Rerun conflict analysis"
+      - "Management certification"
+    owner: "platform"
+
+  - id: access.firefighter
+    group: access_governance
+    name: "Emergency access (Firefighter)"
+    priority: important
+    frameworks: [sap_grc]
+    acceptance:
+      - "Time-boxed elevated role"
+      - "Mandatory reason"
+      - "Enhanced logging"
+      - "Post-access review task auto-created"
+    owner: "platform"
+
+  - id: access.role_mining
+    group: access_governance
+    name: "Role mining & least-privilege recommendations"
+    priority: nice
+    frameworks: [sap_grc]
+    acceptance:
+      - "Identify unused roles/permissions"
+      - "Propose least-privilege alternatives"
+    owner: "platform"
+
+  - id: access.ccm
+    group: access_governance
+    name: "Continuous Controls Monitoring (CCM)"
+    priority: important
+    frameworks: [sap_grc]
+    acceptance:
+      - "Unusual postings detection (weekend, odd hours)"
+      - "High amount thresholds"
+      - "Control override alerts"
+    owner: "platform"
+
+  # -------------------------------------------------------------------------
+  # RAG AI COPILOT
+  # -------------------------------------------------------------------------
+  - id: copilot.semantic_kb
+    group: copilot
+    name: "Semantic knowledge base (pgvector)"
+    priority: core
+    frameworks: []
+    acceptance:
+      - "500+ documentation files indexed"
+      - "SAP best practices, BIR guides"
+    owner: "platform"
+
+  - id: copilot.context_chat
+    group: copilot
+    name: "Context-aware chat widget (view-aware)"
+    priority: important
+    frameworks: []
+    acceptance:
+      - "Understands current Odoo view"
+      - "Role-aware responses"
+    owner: "platform"
+
+  - id: copilot.citations
+    group: copilot
+    name: "Citation enforcement + suggestions"
+    priority: important
+    frameworks: []
+    acceptance:
+      - "No citations → no answer"
+      - "Suggest follow-up questions"
+    owner: "platform"
+
+  - id: copilot.tool_use
+    group: copilot
+    name: "Tool-using copilot (read-only Odoo context)"
+    priority: nice
+    frameworks: []
+    acceptance:
+      - "'What's blocking close' queries"
+      - "'Explain why BIR line changed'"
+    owner: "platform"
+
+  - id: copilot.multi_channel
+    group: copilot
+    name: "Multi-channel deployment (Slack, Discord, Zendesk)"
+    priority: nice
+    frameworks: []
+    acceptance:
+      - "Specialized bots per channel"
+      - "Distributed team support"
+    owner: "platform"
+
+  # -------------------------------------------------------------------------
+  # PROCESS INTELLIGENCE
+  # -------------------------------------------------------------------------
+  - id: pi.event_capture
+    group: process_intel
+    name: "Close event capture (cycle time, FPY)"
+    priority: core
+    frameworks: [sap_signavio]
+    acceptance:
+      - "Every close event logged"
+      - "Total cycle time calculation"
+      - "First pass yield metric"
+    owner: "platform"
+
+  - id: pi.bottleneck_detection
+    group: process_intel
+    name: "Bottleneck detection (AI-powered)"
+    priority: important
+    frameworks: [sap_signavio]
+    acceptance:
+      - "Approval queue analysis"
+      - "Wait time detection"
+      - "Rework loop identification"
+    owner: "platform"
+
+  - id: pi.conformance
+    group: process_intel
+    name: "Conformance checking vs reference model"
+    priority: important
+    frameworks: [sap_signavio]
+    acceptance:
+      - "Compare actual vs 'happy path'"
+      - "Detect skipped approvals"
+      - "Out-of-order execution alerts"
+    owner: "platform"
+
+  - id: pi.predictive
+    group: process_intel
+    name: "Predictive close + cost of delay"
+    priority: nice
+    frameworks: [sap_signavio]
+    acceptance:
+      - "Forecast late tasks from patterns"
+      - "Overtime estimate"
+      - "Compliance risk score"
+    owner: "platform"
+
+  - id: pi.roi_dashboard
+    group: process_intel
+    name: "ROI dashboard + automation recommendations"
+    priority: important
+    frameworks: [sap_signavio]
+    acceptance:
+      - "Potential savings visualization"
+      - "Convert insights → action tasks"
+    owner: "platform"
+
+  - id: pi.maturity_score
+    group: process_intel
+    name: "Close maturity score"
+    priority: nice
+    frameworks: [sap_signavio]
+    acceptance:
+      - "FPY, cycle time, waiver count"
+      - "% tasks with evidence"
+    owner: "platform"
+
+  # -------------------------------------------------------------------------
+  # CLOSE COCKPIT UI
+  # -------------------------------------------------------------------------
+  - id: ui.cockpit_dashboard
+    group: ui
+    name: "Close Cockpit dashboard (exec view)"
+    priority: core
+    frameworks: [sap_afc]
+    acceptance:
+      - "Close calendar + run status"
+      - "Critical path + blockers"
+      - "Evidence completeness"
+    owner: "frontend"
+
+  - id: ui.agui_events
+    group: ui
+    name: "AGUI-like event stream for steps"
+    priority: important
+    frameworks: [sap_afc]
+    acceptance:
+      - "Step events: started/progress/finished/error"
+      - "Tool call cards + artifacts list"
+    owner: "frontend"
+
+  - id: ui.compliance_view
+    group: ui
+    name: "Compliance dashboard (SOD, BIR, IC)"
+    priority: important
+    frameworks: [sox_404]
+    acceptance:
+      - "SoD exceptions + firefighter sessions"
+      - "BIR submission status"
+      - "IC disputes + netting status"
+    owner: "frontend"
+
+  - id: ui.process_kpis
+    group: ui
+    name: "Process KPIs visualization"
+    priority: important
+    frameworks: [sap_signavio]
+    acceptance:
+      - "Cycle time trends"
+      - "First pass yield charts"
+      - "Benchmark comparisons"
+    owner: "frontend"
