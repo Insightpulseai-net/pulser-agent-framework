@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import asyncio
 import random
-from typing import Optional, Type, Union
 
 from pulser_agents.core.exceptions import ProviderError, RateLimitError
 from pulser_agents.core.response import RunResult
@@ -38,8 +37,8 @@ class RetryMiddleware(Middleware):
         max_delay: float = 60.0,
         exponential_base: float = 2.0,
         jitter: bool = True,
-        retry_on: Optional[tuple[Type[Exception], ...]] = None,
-        retry_on_status: Optional[tuple[int, ...]] = None,
+        retry_on: tuple[type[Exception], ...] | None = None,
+        retry_on_status: tuple[int, ...] | None = None,
     ) -> None:
         """
         Initialize retry middleware.
@@ -97,7 +96,7 @@ class RetryMiddleware(Middleware):
 
         return False
 
-    def _get_retry_after(self, error: Exception) -> Optional[float]:
+    def _get_retry_after(self, error: Exception) -> float | None:
         """Get retry-after from error if available."""
         if isinstance(error, RateLimitError) and error.retry_after:
             return error.retry_after
@@ -109,7 +108,7 @@ class RetryMiddleware(Middleware):
         next_handler: NextHandler,
     ) -> RunResult:
         """Execute with retry logic."""
-        last_error: Optional[Exception] = None
+        last_error: Exception | None = None
         attempts = 0
 
         while attempts <= self.max_retries:
@@ -170,7 +169,7 @@ class CircuitBreakerMiddleware(Middleware):
         failure_threshold: int = 5,
         success_threshold: int = 2,
         reset_timeout: float = 60.0,
-        failure_on: Optional[tuple[Type[Exception], ...]] = None,
+        failure_on: tuple[type[Exception], ...] | None = None,
     ) -> None:
         """
         Initialize circuit breaker middleware.
@@ -193,7 +192,7 @@ class CircuitBreakerMiddleware(Middleware):
         self._state = self.CLOSED
         self._failure_count = 0
         self._success_count = 0
-        self._last_failure_time: Optional[float] = None
+        self._last_failure_time: float | None = None
         self._lock = asyncio.Lock()
 
     async def _should_allow_request(self) -> bool:

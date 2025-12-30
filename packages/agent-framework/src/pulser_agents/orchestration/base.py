@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Any, Optional, Union
+from typing import Any
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -33,7 +33,7 @@ class OrchestratorConfig(BaseModel):
 
     name: str = "orchestrator"
     max_iterations: int = 20
-    timeout: Optional[float] = None
+    timeout: float | None = None
     preserve_history: bool = True
     metadata: dict[str, Any] = Field(default_factory=dict)
 
@@ -67,12 +67,12 @@ class OrchestrationResult(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     orchestrator_name: str
     turns: list[AgentTurn] = Field(default_factory=list)
-    final_response: Optional[AgentResponse] = None
+    final_response: AgentResponse | None = None
     total_usage: Usage = Field(default_factory=Usage)
     agents_involved: list[str] = Field(default_factory=list)
     iterations: int = 0
     started_at: datetime = Field(default_factory=datetime.utcnow)
-    completed_at: Optional[datetime] = None
+    completed_at: datetime | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
     @property
@@ -90,7 +90,7 @@ class OrchestrationResult(BaseModel):
         return [turn.response.message for turn in self.turns]
 
     @property
-    def duration_seconds(self) -> Optional[float]:
+    def duration_seconds(self) -> float | None:
         """Get orchestration duration in seconds."""
         if self.completed_at:
             return (self.completed_at - self.started_at).total_seconds()
@@ -137,7 +137,7 @@ class Orchestrator(ABC):
     def __init__(
         self,
         agents: list[Agent],
-        config: Optional[OrchestratorConfig] = None,
+        config: OrchestratorConfig | None = None,
     ) -> None:
         self.agents = agents
         self.config = config or OrchestratorConfig()
@@ -148,15 +148,15 @@ class Orchestrator(ABC):
         """Get orchestrator name."""
         return self.config.name
 
-    def get_agent(self, name: str) -> Optional[Agent]:
+    def get_agent(self, name: str) -> Agent | None:
         """Get an agent by name."""
         return self._agent_map.get(name)
 
     @abstractmethod
     async def run(
         self,
-        message: Union[str, Message],
-        context: Optional[AgentContext] = None,
+        message: str | Message,
+        context: AgentContext | None = None,
         **kwargs: Any,
     ) -> OrchestrationResult:
         """

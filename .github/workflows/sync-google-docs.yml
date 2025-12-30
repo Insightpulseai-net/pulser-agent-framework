@@ -1,0 +1,223 @@
+# =============================================================================
+# Google Docs to GitHub Sync Workflow
+# =============================================================================
+#
+# Automatically syncs Google Docs to the repository as Markdown files.
+#
+# Configuration:
+#   1. Create a Google Service Account and download JSON key
+#   2. Share the Google Doc with the service account email
+#   3. Add the following secrets to your repository:
+#      - GOOGLE_CREDENTIALS: The full JSON key file content
+#      - DOCS_SYNC_PAT: Personal Access Token with repo scope (optional)
+#
+# Usage:
+#   - Runs hourly automatically
+#   - Can be triggered manually from Actions tab
+#   - Creates PR for review instead of direct commits
+#
+# =============================================================================
+
+name: Sync Google Docs to Repository
+
+on:
+  schedule:
+    # Run every hour at minute 15
+    - cron: '15 * * * *'
+
+  workflow_dispatch:
+    inputs:
+      document_id:
+        description: 'Google Doc ID to sync (optional, uses default if empty)'
+        required: false
+        type: string
+      target_path:
+        description: 'Target path in repository (e.g., docs/testing-strategy.md)'
+        required: false
+        default: 'docs/testing/COMPREHENSIVE_TESTING_STRATEGY.md'
+        type: string
+      create_pr:
+        description: 'Create PR instead of direct commit'
+        required: false
+        default: true
+        type: boolean
+
+env:
+  # Default document ID - COMPREHENSIVE TESTING STRATEGY
+  DEFAULT_DOCUMENT_ID: '1Qp4nf8nl7M8MnaNtmrBgP4B1mw2aSUqEzYMKmFBCzH4'
+  DEFAULT_TARGET_PATH: 'docs/testing/COMPREHENSIVE_TESTING_STRATEGY.md'
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  sync-docs:
+    name: Sync Google Docs
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.DOCS_SYNC_PAT || secrets.GITHUB_TOKEN }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install google-api-python-client google-auth-httplib2 google-auth-oauthlib
+          # Install pandoc for better HTML to Markdown conversion
+          sudo apt-get update && sudo apt-get install -y pandoc
+
+      - name: Fetch Google Doc
+        id: fetch
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+          DOCUMENT_ID: ${{ inputs.document_id || env.DEFAULT_DOCUMENT_ID }}
+          OUTPUT_DIR: 'output'
+        run: |
+          python scripts/docs-sync/fetch_google_doc.py
+
+          # Use pandoc for better conversion if available
+          if command -v pandoc &> /dev/null; then
+            pandoc output/document.html -f html -t gfm -o output/document-pandoc.md
+            # Add frontmatter from our script
+            head -n 8 output/document.md > output/final.md
+            tail -n +2 output/document-pandoc.md >> output/final.md
+            mv output/final.md output/document.md
+          fi
+
+      - name: Check for changes
+        id: check
+        run: |
+          TARGET_PATH="${{ inputs.target_path || env.DEFAULT_TARGET_PATH }}"
+
+          # Ensure target directory exists
+          mkdir -p "$(dirname "$TARGET_PATH")"
+
+          # Copy new content
+          cp output/document.md "$TARGET_PATH"
+
+          # Check if there are actual changes
+          if git diff --quiet "$TARGET_PATH" 2>/dev/null; then
+            echo "No changes detected"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "Changes detected"
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "target_path=$TARGET_PATH" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Pull Request
+        if: steps.check.outputs.has_changes == 'true' && (inputs.create_pr == true || inputs.create_pr == '')
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.DOCS_SYNC_PAT || secrets.GITHUB_TOKEN }}
+          commit-message: |
+            docs: sync testing strategy from Google Docs
+
+            Auto-synced from Google Docs
+            Document ID: ${{ inputs.document_id || env.DEFAULT_DOCUMENT_ID }}
+            Synced at: ${{ steps.fetch.outputs.timestamp }}
+          branch: docs/sync-${{ github.run_number }}
+          delete-branch: true
+          title: '📄 Sync: Update Testing Strategy Documentation'
+          body: |
+            ## Automated Documentation Sync
+
+            This PR contains updates synced from Google Docs.
+
+            ### Details
+
+            | Field | Value |
+            |-------|-------|
+            | Document | ${{ steps.fetch.outputs.title }} |
+            | Document ID | `${{ inputs.document_id || env.DEFAULT_DOCUMENT_ID }}` |
+            | Synced At | ${{ steps.fetch.outputs.timestamp }} |
+            | Revision | `${{ steps.fetch.outputs.revision_id }}` |
+            | Target File | `${{ steps.check.outputs.target_path }}` |
+
+            ### Source
+
+            [View in Google Docs](https://docs.google.com/document/d/${{ inputs.document_id || env.DEFAULT_DOCUMENT_ID }}/edit)
+
+            ---
+
+            *This PR was automatically created by the docs-sync workflow.*
+          labels: |
+            documentation
+            automated
+          reviewers: |
+            # Add reviewers here
+          draft: false
+
+      - name: Direct commit (if PR disabled)
+        if: steps.check.outputs.has_changes == 'true' && inputs.create_pr == false
+        run: |
+          git config user.name "doc-sync-bot"
+          git config user.email "bot@insightpulseai.net"
+
+          git add "${{ steps.check.outputs.target_path }}"
+          git commit -m "docs: sync testing strategy from Google Docs
+
+          Auto-synced from Google Docs
+          Document ID: ${{ inputs.document_id || env.DEFAULT_DOCUMENT_ID }}
+          Synced at: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+          git push
+
+      - name: Send notification
+        if: steps.check.outputs.has_changes == 'true' && always()
+        run: |
+          echo "Documentation sync completed"
+          echo "Title: ${{ steps.fetch.outputs.title }}"
+          echo "Target: ${{ steps.check.outputs.target_path }}"
+          # Add Mattermost/Slack webhook notification here if needed
+
+  validate-docs:
+    name: Validate Synced Docs
+    needs: sync-docs
+    runs-on: ubuntu-latest
+    if: always() && needs.sync-docs.result == 'success'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install markdown tools
+        run: |
+          npm install -g markdownlint-cli markdown-toc
+
+      - name: Validate Markdown
+        continue-on-error: true
+        run: |
+          TARGET_PATH="${{ inputs.target_path || 'docs/testing/COMPREHENSIVE_TESTING_STRATEGY.md' }}"
+          if [ -f "$TARGET_PATH" ]; then
+            markdownlint "$TARGET_PATH" --config .markdownlint.json 2>/dev/null || \
+            markdownlint "$TARGET_PATH" || true
+          fi
+
+      - name: Check for TODOs
+        continue-on-error: true
+        run: |
+          TARGET_PATH="${{ inputs.target_path || 'docs/testing/COMPREHENSIVE_TESTING_STRATEGY.md' }}"
+          if [ -f "$TARGET_PATH" ]; then
+            if grep -q "TODO\|FIXME\|HACK\|XXX" "$TARGET_PATH"; then
+              echo "::warning::Found TODO/FIXME comments in documentation"
+            fi
+          fi

@@ -15,16 +15,16 @@ from pulser_agents.middleware.base import (
     MiddlewareChain,
     MiddlewareContext,
 )
+from pulser_agents.middleware.cache import CacheMiddleware
 from pulser_agents.middleware.logging import LoggingMiddleware
 from pulser_agents.middleware.rate_limit import RateLimitMiddleware
-from pulser_agents.middleware.cache import CacheMiddleware
 from pulser_agents.middleware.retry import RetryMiddleware
+from pulser_agents.middleware.tracing import TracingMiddleware
 from pulser_agents.middleware.validation import (
-    ValidationMiddleware,
     InputValidator,
     OutputValidator,
+    ValidationMiddleware,
 )
-from pulser_agents.middleware.tracing import TracingMiddleware
 
 __all__ = [
     "Middleware",

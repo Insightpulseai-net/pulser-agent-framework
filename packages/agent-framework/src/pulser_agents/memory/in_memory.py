@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import fnmatch
 from datetime import datetime, timedelta
-from typing import Any, Optional
+from typing import Any
 
 from pulser_agents.memory.base import MemoryConfig, MemoryEntry, MemoryProvider
 
@@ -36,7 +36,7 @@ class InMemoryProvider(MemoryProvider):
         >>> await provider.set("session:123", {"user": "alice"})
     """
 
-    def __init__(self, config: Optional[MemoryConfig] = None) -> None:
+    def __init__(self, config: MemoryConfig | None = None) -> None:
         super().__init__(config)
         self._store: dict[str, MemoryEntry] = {}
 
@@ -63,7 +63,7 @@ class InMemoryProvider(MemoryProvider):
             )
             del self._store[lru_key]
 
-    async def get(self, key: str) -> Optional[Any]:
+    async def get(self, key: str) -> Any | None:
         """Get a value from memory."""
         self._cleanup_expired()
 
@@ -84,8 +84,8 @@ class InMemoryProvider(MemoryProvider):
         self,
         key: str,
         value: Any,
-        ttl: Optional[int] = None,
-        metadata: Optional[dict[str, Any]] = None,
+        ttl: int | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """Set a value in memory."""
         self._cleanup_expired()
@@ -140,7 +140,7 @@ class InMemoryProvider(MemoryProvider):
         for key in keys_to_delete:
             del self._store[key]
 
-    async def keys(self, pattern: Optional[str] = None) -> list[str]:
+    async def keys(self, pattern: str | None = None) -> list[str]:
         """List keys matching a pattern."""
         self._cleanup_expired()
 
@@ -159,7 +159,7 @@ class InMemoryProvider(MemoryProvider):
 
         return matching_keys
 
-    async def get_entry(self, key: str) -> Optional[MemoryEntry]:
+    async def get_entry(self, key: str) -> MemoryEntry | None:
         """Get the full entry including metadata."""
         full_key = self._make_key(key)
         entry = self._store.get(full_key)
@@ -207,7 +207,7 @@ class ConversationMemory(InMemoryProvider):
 
     def __init__(
         self,
-        config: Optional[MemoryConfig] = None,
+        config: MemoryConfig | None = None,
         max_messages: int = 100,
     ) -> None:
         super().__init__(config)
@@ -217,7 +217,7 @@ class ConversationMemory(InMemoryProvider):
         self,
         role: str,
         content: str,
-        metadata: Optional[dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """Add a message to conversation history."""
         messages = await self.get("messages") or []
@@ -236,7 +236,7 @@ class ConversationMemory(InMemoryProvider):
 
     async def get_history(
         self,
-        last_n: Optional[int] = None,
+        last_n: int | None = None,
     ) -> list[dict[str, Any]]:
         """Get conversation history."""
         messages = await self.get("messages") or []
@@ -250,7 +250,7 @@ class ConversationMemory(InMemoryProvider):
         """Clear conversation history."""
         await self.delete("messages")
 
-    async def get_summary(self) -> Optional[str]:
+    async def get_summary(self) -> str | None:
         """Get conversation summary if available."""
         return await self.get("summary")
 

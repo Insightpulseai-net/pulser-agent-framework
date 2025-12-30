@@ -1,0 +1,303 @@
+{
+  "name": "Google Docs → GitHub Sync",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute",
+              "minute": 5
+            }
+          ]
+        },
+        "documentId": "={{ $env.GOOGLE_DOC_ID || '1Qp4nf8nl7M8MnaNtmrBgP4B1mw2aSUqEzYMKmFBCzH4' }}",
+        "events": ["documentModified"]
+      },
+      "id": "google-docs-trigger",
+      "name": "Google Docs Trigger",
+      "type": "n8n-nodes-base.googleDocsTrigger",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "credentials": {
+        "googleDocsOAuth2Api": {
+          "id": "google-docs-creds",
+          "name": "Google Docs Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "documentId": "={{ $json.documentId || $env.GOOGLE_DOC_ID }}"
+      },
+      "id": "google-docs-get",
+      "name": "Get Document Content",
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 2,
+      "position": [450, 300],
+      "credentials": {
+        "googleDocsOAuth2Api": {
+          "id": "google-docs-creds",
+          "name": "Google Docs Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// Extract content from Google Docs structure\nconst doc = $input.all()[0].json;\nconst title = doc.title || 'Document';\n\n// Extract text content from document body\nlet content = '';\nif (doc.body && doc.body.content) {\n  for (const element of doc.body.content) {\n    if (element.paragraph && element.paragraph.elements) {\n      for (const el of element.paragraph.elements) {\n        if (el.textRun && el.textRun.content) {\n          content += el.textRun.content;\n        }\n      }\n    }\n  }\n}\n\nconst timestamp = new Date().toISOString();\n\nreturn {\n  title: title,\n  content: content,\n  timestamp: timestamp,\n  documentId: doc.documentId || $env.GOOGLE_DOC_ID,\n  revisionId: doc.revisionId || 'unknown'\n};"
+      },
+      "id": "extract-content",
+      "name": "Extract Document Content",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Convert to Markdown with frontmatter\nconst { title, content, timestamp, documentId, revisionId } = $input.all()[0].json;\n\n// Create safe filename\nconst filename = title\n  .toLowerCase()\n  .replace(/[^a-z0-9]+/g, '-')\n  .replace(/^-|-$/g, '') + '.md';\n\n// Build Markdown with frontmatter\nconst markdown = `---\ntitle: \"${title}\"\ndocument_id: \"${documentId}\"\nrevision_id: \"${revisionId}\"\nsynced_at: \"${timestamp}\"\nsource: \"Google Docs\"\n---\n\n# ${title}\n\n${content}\n\n---\n\n*This document was automatically synced from Google Docs on ${timestamp}*\n*Document ID: ${documentId}*\n`;\n\nreturn {\n  markdown: markdown,\n  filename: filename,\n  title: title,\n  timestamp: timestamp,\n  documentId: documentId\n};"
+      },
+      "id": "convert-markdown",
+      "name": "Convert to Markdown",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "operation": "createOrUpdate",
+        "owner": "={{ $env.GITHUB_OWNER || 'Insightpulseai-net' }}",
+        "repository": "={{ $env.GITHUB_REPO || 'pulser-agent-framework' }}",
+        "filePath": "={{ 'docs/testing/' + $json.filename }}",
+        "fileContent": "={{ $json.markdown }}",
+        "commitMessage": "={{ 'docs: sync ' + $json.title + ' from Google Docs\\n\\nAuto-synced at: ' + $json.timestamp + '\\nDocument ID: ' + $json.documentId }}",
+        "branch": "={{ $env.GITHUB_BRANCH || 'main' }}"
+      },
+      "id": "github-create-file",
+      "name": "GitHub: Create/Update File",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1,
+      "position": [1050, 200],
+      "credentials": {
+        "githubApi": {
+          "id": "github-creds",
+          "name": "GitHub Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "owner": "={{ $env.GITHUB_OWNER || 'Insightpulseai-net' }}",
+        "repository": "={{ $env.GITHUB_REPO || 'pulser-agent-framework' }}",
+        "title": "={{ '📄 Sync: Update ' + $json.title }}",
+        "body": "={{ '## Automated Documentation Sync\\n\\nThis PR contains updates synced from Google Docs.\\n\\n### Details\\n\\n| Field | Value |\\n|-------|-------|\\n| Document | ' + $json.title + ' |\\n| Document ID | `' + $json.documentId + '` |\\n| Synced At | ' + $json.timestamp + ' |\\n\\n### Source\\n\\n[View in Google Docs](https://docs.google.com/document/d/' + $json.documentId + '/edit)\\n\\n---\\n\\n*This PR was automatically created by n8n.*' }}",
+        "head": "={{ 'docs/sync-' + Date.now() }}",
+        "base": "={{ $env.GITHUB_BRANCH || 'main' }}"
+      },
+      "id": "github-create-pr",
+      "name": "GitHub: Create PR",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1,
+      "position": [1050, 400],
+      "credentials": {
+        "githubApi": {
+          "id": "github-creds",
+          "name": "GitHub Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "channel": "#documentation",
+        "text": "={{ '📄 **Documentation Updated**\\n\\n**Document:** ' + $json.title + '\\n**Synced at:** ' + $json.timestamp + '\\n**Repository:** ' + ($env.GITHUB_OWNER || 'Insightpulseai-net') + '/' + ($env.GITHUB_REPO || 'pulser-agent-framework') }}",
+        "otherOptions": {
+          "username": "doc-sync-bot",
+          "icon_emoji": ":memo:"
+        }
+      },
+      "id": "mattermost-notify",
+      "name": "Mattermost: Notify Team",
+      "type": "n8n-nodes-base.mattermost",
+      "typeVersion": 1,
+      "position": [1250, 300],
+      "credentials": {
+        "mattermostApi": {
+          "id": "mattermost-creds",
+          "name": "Mattermost Webhook"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// Log sync event to Supabase for audit trail\nconst { title, timestamp, documentId } = $input.all()[0].json;\n\nreturn {\n  event_type: 'doc_sync',\n  document_id: documentId,\n  document_title: title,\n  synced_at: timestamp,\n  status: 'success',\n  repository: ($env.GITHUB_OWNER || 'Insightpulseai-net') + '/' + ($env.GITHUB_REPO || 'pulser-agent-framework')\n};"
+      },
+      "id": "prepare-audit-log",
+      "name": "Prepare Audit Log",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1250, 500]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "table": "audit_logs",
+        "columns": "event_type,document_id,document_title,synced_at,status,repository"
+      },
+      "id": "supabase-log",
+      "name": "Supabase: Log Audit",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1450, 500],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-creds",
+          "name": "Supabase Account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "error-trigger",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [250, 500]
+    },
+    {
+      "parameters": {
+        "channel": "#alerts",
+        "text": "={{ '🚨 **Doc Sync Failed**\\n\\n**Error:** ' + $json.error.message + '\\n**Workflow:** Google Docs → GitHub Sync\\n**Time:** ' + new Date().toISOString() }}",
+        "otherOptions": {
+          "username": "doc-sync-bot",
+          "icon_emoji": ":warning:"
+        }
+      },
+      "id": "mattermost-error",
+      "name": "Mattermost: Error Alert",
+      "type": "n8n-nodes-base.mattermost",
+      "typeVersion": 1,
+      "position": [450, 500],
+      "credentials": {
+        "mattermostApi": {
+          "id": "mattermost-creds",
+          "name": "Mattermost Webhook"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Google Docs Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Document Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Document Content": {
+      "main": [
+        [
+          {
+            "node": "Extract Document Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Document Content": {
+      "main": [
+        [
+          {
+            "node": "Convert to Markdown",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert to Markdown": {
+      "main": [
+        [
+          {
+            "node": "GitHub: Create/Update File",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GitHub: Create PR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GitHub: Create/Update File": {
+      "main": [
+        [
+          {
+            "node": "Mattermost: Notify Team",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GitHub: Create PR": {
+      "main": [
+        [
+          {
+            "node": "Prepare Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Audit Log": {
+      "main": [
+        [
+          {
+            "node": "Supabase: Log Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Mattermost: Error Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "documentation",
+      "createdAt": "2025-12-30T00:00:00.000Z",
+      "updatedAt": "2025-12-30T00:00:00.000Z"
+    },
+    {
+      "name": "automation",
+      "createdAt": "2025-12-30T00:00:00.000Z",
+      "updatedAt": "2025-12-30T00:00:00.000Z"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2025-12-30T00:00:00.000Z",
+  "versionId": "1"
+}

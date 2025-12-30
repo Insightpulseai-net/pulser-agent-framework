@@ -7,22 +7,22 @@ Provides input and output validation for agent requests.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Optional, Union
+from typing import Any
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 
 from pulser_agents.core.exceptions import AgentError
 from pulser_agents.core.response import RunResult
 from pulser_agents.middleware.base import Middleware, MiddlewareContext, NextHandler
 
 
-class ValidationError(AgentError):
+class ValidationMiddlewareError(AgentError):
     """Validation failed."""
 
     def __init__(
         self,
         message: str,
-        errors: Optional[list[dict[str, Any]]] = None,
+        errors: list[dict[str, Any]] | None = None,
     ) -> None:
         super().__init__(message)
         self.errors = errors or []
@@ -80,13 +80,13 @@ class LengthValidator(InputValidator):
         length = len(text)
 
         if length < self.min_length:
-            raise ValidationError(
+            raise ValidationMiddlewareError(
                 f"Input too short: {length} < {self.min_length}",
                 errors=[{"field": "input", "error": "too_short"}],
             )
 
         if length > self.max_length:
-            raise ValidationError(
+            raise ValidationMiddlewareError(
                 f"Input too long: {length} > {self.max_length}",
                 errors=[{"field": "input", "error": "too_long"}],
             )
@@ -97,7 +97,7 @@ class ContentFilterValidator(InputValidator):
 
     def __init__(
         self,
-        blocked_terms: Optional[list[str]] = None,
+        blocked_terms: list[str] | None = None,
         case_sensitive: bool = False,
     ) -> None:
         self.blocked_terms = blocked_terms or []
@@ -114,8 +114,8 @@ class ContentFilterValidator(InputValidator):
 
         for term in blocked:
             if term in text:
-                raise ValidationError(
-                    f"Input contains prohibited content",
+                raise ValidationMiddlewareError(
+                    "Input contains prohibited content",
                     errors=[{"field": "input", "error": "prohibited_content"}],
                 )
 
@@ -130,7 +130,7 @@ class PydanticValidator(OutputValidator):
         import json
 
         if not output.final_response:
-            raise ValidationError(
+            raise ValidationMiddlewareError(
                 "No output to validate",
                 errors=[{"field": "output", "error": "missing"}],
             )
@@ -142,12 +142,12 @@ class PydanticValidator(OutputValidator):
             data = json.loads(content)
             self.model.model_validate(data)
         except json.JSONDecodeError:
-            raise ValidationError(
+            raise ValidationMiddlewareError(
                 "Output is not valid JSON",
                 errors=[{"field": "output", "error": "invalid_json"}],
             )
         except Exception as e:
-            raise ValidationError(
+            raise ValidationMiddlewareError(
                 f"Output validation failed: {e}",
                 errors=[{"field": "output", "error": "validation_failed"}],
             )
@@ -171,13 +171,13 @@ class OutputLengthValidator(OutputValidator):
         length = len(output.final_response.content)
 
         if length < self.min_length:
-            raise ValidationError(
+            raise ValidationMiddlewareError(
                 f"Output too short: {length} < {self.min_length}",
                 errors=[{"field": "output", "error": "too_short"}],
             )
 
         if length > self.max_length:
-            raise ValidationError(
+            raise ValidationMiddlewareError(
                 f"Output too long: {length} > {self.max_length}",
                 errors=[{"field": "output", "error": "too_long"}],
             )
@@ -204,8 +204,8 @@ class ValidationMiddleware(Middleware):
 
     def __init__(
         self,
-        input_validators: Optional[list[InputValidator]] = None,
-        output_validators: Optional[list[OutputValidator]] = None,
+        input_validators: list[InputValidator] | None = None,
+        output_validators: list[OutputValidator] | None = None,
         raise_on_input_error: bool = True,
         raise_on_output_error: bool = False,
     ) -> None:
@@ -234,7 +234,7 @@ class ValidationMiddleware(Middleware):
         for validator in self.input_validators:
             try:
                 validator.validate(ctx.input_message, ctx)
-            except ValidationError as e:
+            except ValidationMiddlewareError as e:
                 input_errors.extend(e.errors)
                 if self.raise_on_input_error:
                     raise
@@ -249,7 +249,7 @@ class ValidationMiddleware(Middleware):
         for validator in self.output_validators:
             try:
                 validator.validate(result, ctx)
-            except ValidationError as e:
+            except ValidationMiddlewareError as e:
                 output_errors.extend(e.errors)
                 if self.raise_on_output_error:
                     raise
@@ -352,7 +352,7 @@ class SchemaValidationMiddleware(Middleware):
             ctx.set_metadata("schema_validation_errors", errors)
 
             if errors and self.raise_on_error:
-                raise ValidationError(
+                raise ValidationMiddlewareError(
                     f"Schema validation failed: {errors}",
                     errors=[{"field": "output", "error": e} for e in errors],
                 )
@@ -360,7 +360,7 @@ class SchemaValidationMiddleware(Middleware):
         except json.JSONDecodeError:
             ctx.set_metadata("schema_validation_errors", ["Invalid JSON"])
             if self.raise_on_error:
-                raise ValidationError(
+                raise ValidationMiddlewareError(
                     "Output is not valid JSON",
                     errors=[{"field": "output", "error": "invalid_json"}],
                 )

@@ -7,7 +7,8 @@ Executes multiple agents in parallel and aggregates results.
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Callable, Optional, Union
+from collections.abc import Callable
+from typing import Any
 
 from pulser_agents.core.agent import Agent
 from pulser_agents.core.context import AgentContext
@@ -15,11 +16,10 @@ from pulser_agents.core.exceptions import OrchestrationError
 from pulser_agents.core.message import Message
 from pulser_agents.core.response import AgentResponse
 from pulser_agents.orchestration.base import (
+    OrchestrationResult,
     Orchestrator,
     OrchestratorConfig,
-    OrchestrationResult,
 )
-
 
 # Type for aggregation functions
 AggregationFunc = Callable[[list[AgentResponse]], str]
@@ -70,8 +70,8 @@ class ConcurrentOrchestrator(Orchestrator):
     def __init__(
         self,
         agents: list[Agent],
-        config: Optional[OrchestratorConfig] = None,
-        aggregator: Optional[AggregationFunc] = None,
+        config: OrchestratorConfig | None = None,
+        aggregator: AggregationFunc | None = None,
         fail_fast: bool = False,
     ) -> None:
         """
@@ -90,8 +90,8 @@ class ConcurrentOrchestrator(Orchestrator):
 
     async def run(
         self,
-        message: Union[str, Message],
-        context: Optional[AgentContext] = None,
+        message: str | Message,
+        context: AgentContext | None = None,
         **kwargs: Any,
     ) -> OrchestrationResult:
         """
@@ -116,7 +116,7 @@ class ConcurrentOrchestrator(Orchestrator):
         input_msg = message if isinstance(message, str) else message.text
 
         # Create tasks for all agents
-        async def run_agent(agent: Agent) -> tuple[Agent, Optional[AgentResponse], Optional[Exception]]:
+        async def run_agent(agent: Agent) -> tuple[Agent, AgentResponse | None, Exception | None]:
             try:
                 agent_ctx = ctx.child_context() if self.config.preserve_history else AgentContext()
                 run_result = await agent.run(input_msg, context=agent_ctx, **kwargs)
@@ -208,8 +208,8 @@ class MapReduceOrchestrator(Orchestrator):
         self,
         mappers: list[Agent],
         reducer: Agent,
-        config: Optional[OrchestratorConfig] = None,
-        chunk_func: Optional[Callable[[str], list[str]]] = None,
+        config: OrchestratorConfig | None = None,
+        chunk_func: Callable[[str], list[str]] | None = None,
     ) -> None:
         """
         Initialize the map-reduce orchestrator.
@@ -229,8 +229,8 @@ class MapReduceOrchestrator(Orchestrator):
 
     async def run(
         self,
-        message: Union[str, Message],
-        context: Optional[AgentContext] = None,
+        message: str | Message,
+        context: AgentContext | None = None,
         **kwargs: Any,
     ) -> OrchestrationResult:
         """
@@ -254,7 +254,7 @@ class MapReduceOrchestrator(Orchestrator):
             inputs = [input_msg] * len(self.mappers)
 
         # Run mappers in parallel
-        async def run_mapper(agent: Agent, inp: str) -> tuple[Agent, Optional[AgentResponse], Optional[Exception]]:
+        async def run_mapper(agent: Agent, inp: str) -> tuple[Agent, AgentResponse | None, Exception | None]:
             try:
                 agent_ctx = ctx.child_context() if self.config.preserve_history else AgentContext()
                 run_result = await agent.run(inp, context=agent_ctx, **kwargs)
@@ -283,7 +283,7 @@ class MapReduceOrchestrator(Orchestrator):
 
         # Reduce phase
         reduce_input = (
-            f"Please synthesize the following analyses:\n\n"
+            "Please synthesize the following analyses:\n\n"
             + "\n\n".join(mapper_outputs)
         )
 

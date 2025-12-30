@@ -7,7 +7,8 @@ Defines the interface that all LLM provider clients must implement.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, AsyncIterator, Optional
+from collections.abc import AsyncIterator
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -24,24 +25,24 @@ class ChatClientConfig(BaseModel):
 
     model: str = "gpt-4o"
     temperature: float = 0.7
-    max_tokens: Optional[int] = None
-    top_p: Optional[float] = None
-    frequency_penalty: Optional[float] = None
-    presence_penalty: Optional[float] = None
-    stop: Optional[list[str]] = None
+    max_tokens: int | None = None
+    top_p: float | None = None
+    frequency_penalty: float | None = None
+    presence_penalty: float | None = None
+    stop: list[str] | None = None
     timeout: float = 60.0
     max_retries: int = 3
     retry_delay: float = 1.0
 
     # Provider-specific
-    api_key: Optional[str] = None
-    base_url: Optional[str] = None
-    organization: Optional[str] = None
+    api_key: str | None = None
+    base_url: str | None = None
+    organization: str | None = None
 
     # Azure-specific
-    azure_endpoint: Optional[str] = None
-    azure_deployment: Optional[str] = None
-    api_version: Optional[str] = None
+    azure_endpoint: str | None = None
+    azure_deployment: str | None = None
+    api_version: str | None = None
 
     # Feature flags
     streaming: bool = False
@@ -97,7 +98,7 @@ class BaseChatClient(ABC):
         ...         pass
     """
 
-    def __init__(self, config: Optional[ChatClientConfig] = None) -> None:
+    def __init__(self, config: ChatClientConfig | None = None) -> None:
         self.config = config or ChatClientConfig()
 
     @property
@@ -109,7 +110,7 @@ class BaseChatClient(ABC):
     async def chat(
         self,
         messages: list[Message],
-        tools: Optional[list[ToolDefinition]] = None,
+        tools: list[ToolDefinition] | None = None,
         **kwargs: Any
     ) -> AgentResponse:
         """
@@ -129,7 +130,7 @@ class BaseChatClient(ABC):
     async def chat_stream(
         self,
         messages: list[Message],
-        tools: Optional[list[ToolDefinition]] = None,
+        tools: list[ToolDefinition] | None = None,
         **kwargs: Any
     ) -> AsyncIterator[StreamingChunk]:
         """
@@ -168,8 +169,8 @@ class MockChatClient(BaseChatClient):
 
     def __init__(
         self,
-        responses: Optional[list[str]] = None,
-        config: Optional[ChatClientConfig] = None
+        responses: list[str] | None = None,
+        config: ChatClientConfig | None = None
     ) -> None:
         super().__init__(config)
         self._responses = responses or ["This is a mock response."]
@@ -178,7 +179,7 @@ class MockChatClient(BaseChatClient):
     async def chat(
         self,
         messages: list[Message],
-        tools: Optional[list[ToolDefinition]] = None,
+        tools: list[ToolDefinition] | None = None,
         **kwargs: Any
     ) -> AgentResponse:
         """Return a mock response."""
@@ -194,7 +195,7 @@ class MockChatClient(BaseChatClient):
     async def chat_stream(
         self,
         messages: list[Message],
-        tools: Optional[list[ToolDefinition]] = None,
+        tools: list[ToolDefinition] | None = None,
         **kwargs: Any
     ) -> AsyncIterator[StreamingChunk]:
         """Stream a mock response."""

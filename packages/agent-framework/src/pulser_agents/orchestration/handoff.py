@@ -6,8 +6,9 @@ Enables dynamic agent handoff based on task requirements.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from enum import Enum
-from typing import Any, Callable, Optional, Union
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -16,9 +17,9 @@ from pulser_agents.core.context import AgentContext
 from pulser_agents.core.exceptions import HandoffError, MaxIterationsError, OrchestrationError
 from pulser_agents.core.message import Message
 from pulser_agents.orchestration.base import (
+    OrchestrationResult,
     Orchestrator,
     OrchestratorConfig,
-    OrchestrationResult,
 )
 
 
@@ -36,7 +37,7 @@ class HandoffRule(BaseModel):
 
     target_agent: str
     keywords: list[str] = Field(default_factory=list)
-    condition: Optional[str] = None  # Condition description for LLM
+    condition: str | None = None  # Condition description for LLM
     priority: int = 0  # Higher priority rules checked first
 
 
@@ -71,12 +72,12 @@ class HandoffOrchestrator(Orchestrator):
     def __init__(
         self,
         agents: list[Agent],
-        config: Optional[OrchestratorConfig] = None,
+        config: OrchestratorConfig | None = None,
         strategy: HandoffStrategy = HandoffStrategy.LLM,
-        rules: Optional[dict[str, HandoffRule]] = None,
-        router_agent: Optional[Agent] = None,
-        default_agent: Optional[Agent] = None,
-        handoff_condition: Optional[Callable[[str, Agent], Optional[Agent]]] = None,
+        rules: dict[str, HandoffRule] | None = None,
+        router_agent: Agent | None = None,
+        default_agent: Agent | None = None,
+        handoff_condition: Callable[[str, Agent], Agent | None] | None = None,
     ) -> None:
         """
         Initialize the handoff orchestrator.
@@ -98,7 +99,7 @@ class HandoffOrchestrator(Orchestrator):
         self.handoff_condition = handoff_condition
         self._handoff_history: list[tuple[str, str]] = []
 
-    def _check_keyword_handoff(self, content: str) -> Optional[Agent]:
+    def _check_keyword_handoff(self, content: str) -> Agent | None:
         """Check if keywords indicate a handoff."""
         content_lower = content.lower()
 
@@ -123,7 +124,7 @@ class HandoffOrchestrator(Orchestrator):
         content: str,
         current_agent: Agent,
         context: AgentContext,
-    ) -> Optional[Agent]:
+    ) -> Agent | None:
         """Use LLM to determine if handoff is needed."""
         if not self.router_agent:
             return None
@@ -162,7 +163,7 @@ class HandoffOrchestrator(Orchestrator):
         except Exception:
             return None
 
-    def _check_explicit_handoff(self, content: str) -> Optional[tuple[Agent, str]]:
+    def _check_explicit_handoff(self, content: str) -> tuple[Agent, str] | None:
         """Check if agent explicitly requested handoff."""
         # Look for handoff patterns
         patterns = [
@@ -196,7 +197,7 @@ class HandoffOrchestrator(Orchestrator):
         content: str,
         current_agent: Agent,
         context: AgentContext,
-    ) -> Optional[Agent]:
+    ) -> Agent | None:
         """Determine if a handoff should occur."""
         if self.strategy == HandoffStrategy.KEYWORD:
             return self._check_keyword_handoff(content)
@@ -216,9 +217,9 @@ class HandoffOrchestrator(Orchestrator):
 
     async def run(
         self,
-        message: Union[str, Message],
-        context: Optional[AgentContext] = None,
-        start_agent: Optional[Agent] = None,
+        message: str | Message,
+        context: AgentContext | None = None,
+        start_agent: Agent | None = None,
         **kwargs: Any,
     ) -> OrchestrationResult:
         """
@@ -331,9 +332,9 @@ class SkillBasedRouter(HandoffOrchestrator):
     def __init__(
         self,
         skill_agents: dict[str, Agent],
-        config: Optional[OrchestratorConfig] = None,
-        router_agent: Optional[Agent] = None,
-        default_skill: Optional[str] = None,
+        config: OrchestratorConfig | None = None,
+        router_agent: Agent | None = None,
+        default_skill: str | None = None,
     ) -> None:
         """
         Initialize the skill-based router.
@@ -358,8 +359,8 @@ class SkillBasedRouter(HandoffOrchestrator):
 
     async def route(
         self,
-        message: Union[str, Message],
-        context: Optional[AgentContext] = None,
+        message: str | Message,
+        context: AgentContext | None = None,
     ) -> Agent:
         """Determine which agent should handle the message based on skills."""
         if not self.router_agent:

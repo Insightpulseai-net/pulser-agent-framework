@@ -7,7 +7,7 @@ Provides structured logging of agent requests and responses.
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from pulser_agents.core.response import RunResult
 from pulser_agents.middleware.base import Middleware, MiddlewareContext, NextHandler
@@ -31,7 +31,7 @@ class LoggingMiddleware(Middleware):
 
     def __init__(
         self,
-        logger: Optional[logging.Logger] = None,
+        logger: logging.Logger | None = None,
         log_inputs: bool = True,
         log_outputs: bool = True,
         log_level: int = logging.INFO,
@@ -92,7 +92,7 @@ class LoggingMiddleware(Middleware):
 
         self.logger.log(
             self.log_level,
-            f"Agent request started",
+            "Agent request started",
             extra={"data": log_data},
         )
 
@@ -112,7 +112,7 @@ class LoggingMiddleware(Middleware):
 
             self.logger.log(
                 self.log_level,
-                f"Agent request completed",
+                "Agent request completed",
                 extra={"data": log_data},
             )
 
@@ -146,7 +146,7 @@ class StructuredLoggingMiddleware(Middleware):
 
     def __init__(
         self,
-        logger: Optional[Any] = None,
+        logger: Any | None = None,
         log_inputs: bool = True,
         log_outputs: bool = True,
     ) -> None:

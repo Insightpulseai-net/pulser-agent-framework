@@ -9,20 +9,19 @@ from __future__ import annotations
 import asyncio
 import time
 from collections import deque
-from typing import Optional
 
 from pulser_agents.core.exceptions import AgentError
 from pulser_agents.core.response import RunResult
 from pulser_agents.middleware.base import Middleware, MiddlewareContext, NextHandler
 
 
-class RateLimitExceeded(AgentError):
+class RateLimitExceededError(AgentError):
     """Rate limit has been exceeded."""
 
     def __init__(
         self,
         message: str,
-        retry_after: Optional[float] = None,
+        retry_after: float | None = None,
     ) -> None:
         super().__init__(message)
         self.retry_after = retry_after
@@ -96,13 +95,13 @@ class RateLimitMiddleware(Middleware):
             wait_time = (1 - self._tokens) / self._rate
 
             if not self.wait_on_limit:
-                raise RateLimitExceeded(
+                raise RateLimitExceededError(
                     f"Rate limit exceeded. Try again in {wait_time:.2f}s",
                     retry_after=wait_time,
                 )
 
             if wait_time > self.max_wait_seconds:
-                raise RateLimitExceeded(
+                raise RateLimitExceededError(
                     f"Rate limit exceeded. Required wait ({wait_time:.2f}s) "
                     f"exceeds maximum ({self.max_wait_seconds}s)",
                     retry_after=wait_time,
@@ -187,7 +186,7 @@ class SlidingWindowRateLimiter(Middleware):
                 if not self.wait_on_limit:
                     oldest = self._requests[0]
                     retry_after = oldest + self.window_seconds - now
-                    raise RateLimitExceeded(
+                    raise RateLimitExceededError(
                         f"Rate limit exceeded. Try again in {retry_after:.2f}s",
                         retry_after=retry_after,
                     )

@@ -6,10 +6,9 @@ Provides semantic search capabilities using embeddings.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
-
-from pydantic import BaseModel, Field
+from typing import Any
 
 from pulser_agents.memory.base import MemoryConfig, MemoryProvider
 
@@ -57,9 +56,9 @@ class VectorMemoryProvider(MemoryProvider):
 
     def __init__(
         self,
-        config: Optional[VectorMemoryConfig] = None,
-        embedding_func: Optional[Callable[[str], list[float]]] = None,
-        embedding_func_async: Optional[Callable[[str], Any]] = None,
+        config: VectorMemoryConfig | None = None,
+        embedding_func: Callable[[str], list[float]] | None = None,
+        embedding_func_async: Callable[[str], Any] | None = None,
     ) -> None:
         super().__init__(config or VectorMemoryConfig())
         self.vector_config = config or VectorMemoryConfig()
@@ -115,7 +114,7 @@ class VectorMemoryProvider(MemoryProvider):
         self,
         doc_id: str,
         content: str,
-        metadata: Optional[dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """
         Add a document to the vector store.
@@ -135,7 +134,7 @@ class VectorMemoryProvider(MemoryProvider):
 
     async def add_documents(
         self,
-        documents: list[tuple[str, str, Optional[dict[str, Any]]]],
+        documents: list[tuple[str, str, dict[str, Any] | None]],
     ) -> None:
         """
         Add multiple documents.
@@ -150,7 +149,7 @@ class VectorMemoryProvider(MemoryProvider):
         self,
         query: str,
         k: int = 10,
-        filter_metadata: Optional[dict[str, Any]] = None,
+        filter_metadata: dict[str, Any] | None = None,
         min_score: float = 0.0,
     ) -> list[VectorSearchResult]:
         """
@@ -196,7 +195,7 @@ class VectorMemoryProvider(MemoryProvider):
 
         return results[:k]
 
-    async def get_document(self, doc_id: str) -> Optional[dict[str, Any]]:
+    async def get_document(self, doc_id: str) -> dict[str, Any] | None:
         """Get a document by ID."""
         return self._documents.get(doc_id)
 
@@ -220,7 +219,7 @@ class VectorMemoryProvider(MemoryProvider):
         return False
 
     # MemoryProvider interface implementation
-    async def get(self, key: str) -> Optional[Any]:
+    async def get(self, key: str) -> Any | None:
         """Get a document."""
         return self._documents.get(key)
 
@@ -228,8 +227,8 @@ class VectorMemoryProvider(MemoryProvider):
         self,
         key: str,
         value: Any,
-        ttl: Optional[int] = None,
-        metadata: Optional[dict[str, Any]] = None,
+        ttl: int | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """Set a document (value should be a string for embedding)."""
         if isinstance(value, str):
@@ -254,7 +253,7 @@ class VectorMemoryProvider(MemoryProvider):
         self._documents.clear()
         self._vectors.clear()
 
-    async def keys(self, pattern: Optional[str] = None) -> list[str]:
+    async def keys(self, pattern: str | None = None) -> list[str]:
         """List document IDs."""
         import fnmatch
 
@@ -268,7 +267,7 @@ class VectorMemoryProvider(MemoryProvider):
 
 
 def create_openai_embedding_func(
-    api_key: Optional[str] = None,
+    api_key: str | None = None,
     model: str = "text-embedding-ada-002",
 ) -> Callable[[str], Any]:
     """

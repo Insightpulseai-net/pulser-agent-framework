@@ -6,8 +6,9 @@ Includes both complete responses and streaming responses.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from datetime import datetime
-from typing import Any, AsyncIterator, Optional
+from typing import Any
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -53,12 +54,12 @@ class AgentResponse(BaseModel):
     """
 
     id: str = Field(default_factory=lambda: str(uuid4()))
-    agent_name: Optional[str] = None
+    agent_name: str | None = None
     message: Message
-    tool_calls: Optional[list[ToolCall]] = None
+    tool_calls: list[ToolCall] | None = None
     usage: Usage = Field(default_factory=Usage)
-    model: Optional[str] = None
-    finish_reason: Optional[str] = None
+    model: str | None = None
+    finish_reason: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -82,9 +83,9 @@ class StreamingChunk(BaseModel):
 
     id: str
     delta: str
-    tool_call_delta: Optional[dict[str, Any]] = None
-    finish_reason: Optional[str] = None
-    usage: Optional[Usage] = None
+    tool_call_delta: dict[str, Any] | None = None
+    finish_reason: str | None = None
+    usage: Usage | None = None
 
 
 class StreamingResponse:
@@ -101,8 +102,8 @@ class StreamingResponse:
     def __init__(
         self,
         stream: AsyncIterator[StreamingChunk],
-        agent_name: Optional[str] = None,
-        model: Optional[str] = None,
+        agent_name: str | None = None,
+        model: str | None = None,
     ) -> None:
         self._stream = stream
         self._agent_name = agent_name
@@ -110,8 +111,8 @@ class StreamingResponse:
         self._chunks: list[StreamingChunk] = []
         self._content: str = ""
         self._tool_calls: list[ToolCall] = []
-        self._usage: Optional[Usage] = None
-        self._finish_reason: Optional[str] = None
+        self._usage: Usage | None = None
+        self._finish_reason: str | None = None
         self._completed = False
 
     async def __aiter__(self) -> AsyncIterator[StreamingChunk]:
@@ -168,14 +169,14 @@ class RunResult(BaseModel):
     """
 
     id: str = Field(default_factory=lambda: str(uuid4()))
-    agent_name: Optional[str] = None
+    agent_name: str | None = None
     responses: list[AgentResponse] = Field(default_factory=list)
-    final_response: Optional[AgentResponse] = None
+    final_response: AgentResponse | None = None
     total_usage: Usage = Field(default_factory=Usage)
     iterations: int = 0
     metadata: dict[str, Any] = Field(default_factory=dict)
     started_at: datetime = Field(default_factory=datetime.utcnow)
-    completed_at: Optional[datetime] = None
+    completed_at: datetime | None = None
 
     @property
     def content(self) -> str:
@@ -205,7 +206,7 @@ class RunResult(BaseModel):
         self.completed_at = datetime.utcnow()
 
     @property
-    def duration_seconds(self) -> Optional[float]:
+    def duration_seconds(self) -> float | None:
         """Get the run duration in seconds."""
         if self.completed_at:
             return (self.completed_at - self.started_at).total_seconds()

@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Callable
 from datetime import datetime
-from typing import Any, Callable, Optional
+from typing import Any
 
 from pulser_agents.core.message import Message
-from pulser_agents.core.response import AgentResponse, RunResult, Usage
+from pulser_agents.core.response import AgentResponse, RunResult
 from pulser_agents.memory.base import MemoryProvider
 from pulser_agents.memory.in_memory import InMemoryProvider
 from pulser_agents.middleware.base import Middleware, MiddlewareContext, NextHandler
@@ -35,10 +36,10 @@ class CacheMiddleware(Middleware):
 
     def __init__(
         self,
-        cache_provider: Optional[MemoryProvider] = None,
+        cache_provider: MemoryProvider | None = None,
         ttl: int = 3600,
-        key_generator: Optional[Callable[[MiddlewareContext], str]] = None,
-        should_cache: Optional[Callable[[RunResult], bool]] = None,
+        key_generator: Callable[[MiddlewareContext], str] | None = None,
+        should_cache: Callable[[RunResult], bool] | None = None,
     ) -> None:
         """
         Initialize cache middleware.
@@ -159,7 +160,7 @@ class CacheMiddleware(Middleware):
             "ttl": self.ttl,
         }
 
-    async def invalidate(self, pattern: Optional[str] = None) -> int:
+    async def invalidate(self, pattern: str | None = None) -> int:
         """
         Invalidate cache entries.
 

@@ -6,16 +6,17 @@ Executes agents in sequence, passing output from one to the next.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Optional, Union
+from collections.abc import Callable
+from typing import Any
 
 from pulser_agents.core.agent import Agent
 from pulser_agents.core.context import AgentContext
 from pulser_agents.core.exceptions import MaxIterationsError, OrchestrationError
 from pulser_agents.core.message import Message
 from pulser_agents.orchestration.base import (
+    OrchestrationResult,
     Orchestrator,
     OrchestratorConfig,
-    OrchestrationResult,
 )
 
 
@@ -40,8 +41,8 @@ class SequentialOrchestrator(Orchestrator):
     def __init__(
         self,
         agents: list[Agent],
-        config: Optional[OrchestratorConfig] = None,
-        transform: Optional[Callable[[str, Agent, Agent], str]] = None,
+        config: OrchestratorConfig | None = None,
+        transform: Callable[[str, Agent, Agent], str] | None = None,
     ) -> None:
         """
         Initialize the sequential orchestrator.
@@ -58,8 +59,8 @@ class SequentialOrchestrator(Orchestrator):
 
     async def run(
         self,
-        message: Union[str, Message],
-        context: Optional[AgentContext] = None,
+        message: str | Message,
+        context: AgentContext | None = None,
         **kwargs: Any,
     ) -> OrchestrationResult:
         """
@@ -141,8 +142,8 @@ class PipelineOrchestrator(SequentialOrchestrator):
     def __init__(
         self,
         stages: list[tuple[str, Agent]],
-        config: Optional[OrchestratorConfig] = None,
-        conditions: Optional[dict[str, Callable[[str], bool]]] = None,
+        config: OrchestratorConfig | None = None,
+        conditions: dict[str, Callable[[str], bool]] | None = None,
     ) -> None:
         """
         Initialize the pipeline orchestrator.
@@ -160,8 +161,8 @@ class PipelineOrchestrator(SequentialOrchestrator):
 
     async def run(
         self,
-        message: Union[str, Message],
-        context: Optional[AgentContext] = None,
+        message: str | Message,
+        context: AgentContext | None = None,
         **kwargs: Any,
     ) -> OrchestrationResult:
         """

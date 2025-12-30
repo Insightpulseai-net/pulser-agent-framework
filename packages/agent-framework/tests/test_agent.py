@@ -2,16 +2,15 @@
 Tests for Agent class and related functionality.
 """
 
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock
 
 from pulser_agents import Agent, AgentConfig
-from pulser_agents.core.agent import Tool, tool, AgentBuilder
-from pulser_agents.core.base_client import BaseChatClient, MockChatClient, ToolDefinition
-from pulser_agents.core.message import Message
-from pulser_agents.core.response import AgentResponse, Usage
+from pulser_agents.core.agent import AgentBuilder, Tool, tool
+from pulser_agents.core.base_client import MockChatClient, ToolDefinition
 from pulser_agents.core.context import AgentContext
-from pulser_agents.core.exceptions import AgentError, ToolNotFoundError
+from pulser_agents.core.exceptions import AgentError
+from pulser_agents.core.message import Message
 
 
 class TestTool:
@@ -179,7 +178,8 @@ class TestAgent:
 
         agent.reset(keep_system=True)
         assert len(agent.context.history) == 1
-        assert agent.context.history.messages[0].role.value == "system"
+        role = agent.context.history.messages[0].role
+        assert (role.value if hasattr(role, 'value') else role) == "system"
 
 
 class TestAgentBuilder:

@@ -8,28 +8,23 @@ context management, and middleware to create intelligent conversational agents.
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
-from typing import Any, AsyncIterator, Callable, Optional, Union
-from uuid import uuid4
+from collections.abc import Callable
+from typing import Any
 
 from pydantic import BaseModel, Field
 
 from pulser_agents.core.base_client import BaseChatClient, ToolDefinition
-from pulser_agents.core.context import AgentContext, ConversationHistory
+from pulser_agents.core.context import AgentContext
 from pulser_agents.core.exceptions import (
     AgentError,
     MaxIterationsError,
-    ToolError,
     ToolExecutionError,
     ToolNotFoundError,
 )
-from pulser_agents.core.message import Message, MessageRole, ToolCall
+from pulser_agents.core.message import Message, ToolCall
 from pulser_agents.core.response import (
-    AgentResponse,
     RunResult,
-    StreamingChunk,
     StreamingResponse,
-    Usage,
 )
 
 
@@ -58,9 +53,9 @@ class AgentConfig(BaseModel):
 
     name: str = "agent"
     description: str = ""
-    system_prompt: Optional[str] = None
+    system_prompt: str | None = None
     max_iterations: int = 10
-    max_tokens: Optional[int] = None
+    max_tokens: int | None = None
     temperature: float = 0.7
     tools_enabled: bool = True
     streaming: bool = False
@@ -87,10 +82,10 @@ class Tool:
     def __init__(
         self,
         func: ToolFunction,
-        name: Optional[str] = None,
-        description: Optional[str] = None,
-        parameters: Optional[dict[str, Any]] = None,
-        required: Optional[list[str]] = None,
+        name: str | None = None,
+        description: str | None = None,
+        parameters: dict[str, Any] | None = None,
+        required: list[str] | None = None,
     ) -> None:
         self.func = func
         self.name = name or func.__name__
@@ -161,11 +156,11 @@ class Tool:
 
 
 def tool(
-    func: Optional[ToolFunction] = None,
+    func: ToolFunction | None = None,
     *,
-    name: Optional[str] = None,
-    description: Optional[str] = None,
-) -> Union[Tool, Callable[[ToolFunction], Tool]]:
+    name: str | None = None,
+    description: str | None = None,
+) -> Tool | Callable[[ToolFunction], Tool]:
     """
     Decorator to create a Tool from a function.
 
@@ -219,10 +214,10 @@ class Agent:
 
     def __init__(
         self,
-        config: Optional[AgentConfig] = None,
-        client: Optional[BaseChatClient] = None,
-        tools: Optional[list[Tool]] = None,
-        context: Optional[AgentContext] = None,
+        config: AgentConfig | None = None,
+        client: BaseChatClient | None = None,
+        tools: list[Tool] | None = None,
+        context: AgentContext | None = None,
     ) -> None:
         self.config = config or AgentConfig()
         self.client = client
@@ -259,7 +254,7 @@ class Agent:
                     Message.system(self.config.system_prompt)
                 )
 
-    def register_tool(self, t: Union[Tool, ToolFunction]) -> None:
+    def register_tool(self, t: Tool | ToolFunction) -> None:
         """Register a tool with the agent."""
         if not isinstance(t, Tool):
             t = Tool(t)
@@ -330,8 +325,8 @@ class Agent:
 
     async def run(
         self,
-        message: Union[str, Message],
-        context: Optional[AgentContext] = None,
+        message: str | Message,
+        context: AgentContext | None = None,
         **kwargs: Any,
     ) -> RunResult:
         """
@@ -398,8 +393,8 @@ class Agent:
 
     async def run_stream(
         self,
-        message: Union[str, Message],
-        context: Optional[AgentContext] = None,
+        message: str | Message,
+        context: AgentContext | None = None,
         **kwargs: Any,
     ) -> StreamingResponse:
         """
@@ -442,7 +437,7 @@ class Agent:
 
     async def chat(
         self,
-        message: Union[str, Message],
+        message: str | Message,
         **kwargs: Any,
     ) -> str:
         """
@@ -489,9 +484,9 @@ class AgentBuilder:
 
     def __init__(self) -> None:
         self._config = AgentConfig()
-        self._client: Optional[BaseChatClient] = None
+        self._client: BaseChatClient | None = None
         self._tools: list[Tool] = []
-        self._context: Optional[AgentContext] = None
+        self._context: AgentContext | None = None
 
     def name(self, name: str) -> AgentBuilder:
         """Set the agent name."""
@@ -523,14 +518,14 @@ class AgentBuilder:
         self._client = client
         return self
 
-    def tool(self, t: Union[Tool, ToolFunction]) -> AgentBuilder:
+    def tool(self, t: Tool | ToolFunction) -> AgentBuilder:
         """Add a tool."""
         if not isinstance(t, Tool):
             t = Tool(t)
         self._tools.append(t)
         return self
 
-    def tools(self, tools: list[Union[Tool, ToolFunction]]) -> AgentBuilder:
+    def tools(self, tools: list[Tool | ToolFunction]) -> AgentBuilder:
         """Add multiple tools."""
         for t in tools:
             self.tool(t)

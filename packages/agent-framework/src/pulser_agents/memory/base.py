@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -26,8 +26,8 @@ class MemoryConfig(BaseModel):
     """
 
     namespace: str = "default"
-    ttl: Optional[int] = None  # Seconds
-    max_entries: Optional[int] = None
+    ttl: int | None = None  # Seconds
+    max_entries: int | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -51,9 +51,9 @@ class MemoryEntry(BaseModel):
     value: Any
     metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=datetime.utcnow)
-    expires_at: Optional[datetime] = None
+    expires_at: datetime | None = None
     access_count: int = 0
-    last_accessed: Optional[datetime] = None
+    last_accessed: datetime | None = None
 
     def is_expired(self) -> bool:
         """Check if the entry has expired."""
@@ -80,7 +80,7 @@ class MemoryProvider(ABC):
         >>> prefs = await provider.get("user_preference")
     """
 
-    def __init__(self, config: Optional[MemoryConfig] = None) -> None:
+    def __init__(self, config: MemoryConfig | None = None) -> None:
         self.config = config or MemoryConfig()
 
     def _make_key(self, key: str) -> str:
@@ -88,7 +88,7 @@ class MemoryProvider(ABC):
         return f"{self.config.namespace}:{key}"
 
     @abstractmethod
-    async def get(self, key: str) -> Optional[Any]:
+    async def get(self, key: str) -> Any | None:
         """
         Get a value from memory.
 
@@ -105,8 +105,8 @@ class MemoryProvider(ABC):
         self,
         key: str,
         value: Any,
-        ttl: Optional[int] = None,
-        metadata: Optional[dict[str, Any]] = None,
+        ttl: int | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """
         Set a value in memory.
@@ -151,7 +151,7 @@ class MemoryProvider(ABC):
         pass
 
     @abstractmethod
-    async def keys(self, pattern: Optional[str] = None) -> list[str]:
+    async def keys(self, pattern: str | None = None) -> list[str]:
         """
         List keys matching a pattern.
 
@@ -183,7 +183,7 @@ class MemoryProvider(ABC):
     async def set_many(
         self,
         items: dict[str, Any],
-        ttl: Optional[int] = None,
+        ttl: int | None = None,
     ) -> None:
         """
         Set multiple values at once.
