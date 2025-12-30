@@ -109,5 +109,5 @@ credentials/
 supabase/.env
 .supabase/
 **/supabase-key*
-**/SUPABASE_*
-**/supabase_*.json
+**/supabase_config.json
+**/supabase_secrets.json
