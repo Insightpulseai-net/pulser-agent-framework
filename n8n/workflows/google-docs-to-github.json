@@ -1,0 +1,406 @@
+{
+  "name": "Google Docs → GitHub Sync",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "docs-sync",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute",
+              "minute": 5
+            }
+          ]
+        },
+        "triggerOn": "specificFolder",
+        "folderToWatch": "={{ $credentials.googleDriveFolderId }}",
+        "event": "fileUpdated",
+        "options": {}
+      },
+      "id": "drive-trigger",
+      "name": "Google Drive Trigger",
+      "type": "n8n-nodes-base.googleDriveTrigger",
+      "typeVersion": 1,
+      "position": [220, 480],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "CONFIGURE_ME",
+          "name": "Google Drive OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "multiplex"
+      },
+      "id": "merge-triggers",
+      "name": "Merge Triggers",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [460, 380]
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.id || $json.body?.fileId }}"
+        },
+        "options": {
+          "googleFileConversion": {
+            "conversion": {
+              "docsToFormat": "text/markdown"
+            }
+          }
+        }
+      },
+      "id": "download-doc",
+      "name": "Download as Markdown",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [660, 380],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "CONFIGURE_ME",
+          "name": "Google Drive OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "fileId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.id || $json.body?.fileId }}"
+        },
+        "options": {}
+      },
+      "id": "get-file-metadata",
+      "name": "Get File Metadata",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [660, 540],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "CONFIGURE_ME",
+          "name": "Google Drive OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Convert Google Doc name to safe filename\nconst fileName = $('Get File Metadata').first().json.name;\nconst content = $('Download as Markdown').first().binary.data;\n\n// Sanitize filename\nconst safeFileName = fileName\n  .replace(/[^a-zA-Z0-9\\s-_]/g, '')\n  .replace(/\\s+/g, '_')\n  .toUpperCase() + '.md';\n\n// Add YAML frontmatter\nconst now = new Date().toISOString();\nconst frontmatter = `---\ntitle: \"${fileName}\"\nsource: google-docs\nsync_date: \"${now}\"\ndoc_id: \"${$json.id || $json.body?.fileId}\"\n---\\n\\n`;\n\nreturn {\n  fileName: safeFileName,\n  filePath: `docs/google-docs/${safeFileName}`,\n  content: frontmatter + Buffer.from(content, 'base64').toString('utf8'),\n  originalName: fileName,\n  syncDate: now\n};"
+      },
+      "id": "prepare-content",
+      "name": "Prepare Content",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 380]
+    },
+    {
+      "parameters": {
+        "operation": "createOrUpdate",
+        "owner": "Insightpulseai-net",
+        "repository": "pulser-agent-framework",
+        "filePath": "={{ $json.filePath }}",
+        "fileContent": "={{ $json.content }}",
+        "commitMessage": "docs(sync): update {{ $json.originalName }} from Google Docs",
+        "additionalParameters": {
+          "branch": "main"
+        }
+      },
+      "id": "github-commit",
+      "name": "GitHub: Commit File",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1,
+      "position": [1100, 380],
+      "credentials": {
+        "githubApi": {
+          "id": "CONFIGURE_ME",
+          "name": "GitHub API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $env.MATTERMOST_WEBHOOK_URL }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-mattermost",
+      "name": "Mattermost Enabled?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1320, 380]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.MATTERMOST_WEBHOOK_URL }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \":page_facing_up: **Google Docs Synced**\\n\\n| Field | Value |\\n|-------|-------|\\n| Document | {{ $json.originalName }} |\\n| File | `{{ $json.filePath }}` |\\n| Synced | {{ $json.syncDate }} |\\n\\n[View on GitHub](https://github.com/Insightpulseai-net/pulser-agent-framework/blob/main/{{ $json.filePath }})\"\n}",
+        "options": {}
+      },
+      "id": "mattermost-notify",
+      "name": "Mattermost: Notify",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1540, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $env.SUPABASE_URL }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-supabase",
+      "name": "Supabase Enabled?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1320, 540]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "bronze"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "list",
+          "value": "docs_sync_log"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "doc_id": "={{ $json.body?.fileId || $json.id }}",
+            "doc_name": "={{ $json.originalName }}",
+            "file_path": "={{ $json.filePath }}",
+            "sync_status": "success",
+            "synced_at": "={{ $json.syncDate }}"
+          }
+        }
+      },
+      "id": "supabase-log",
+      "name": "Supabase: Log Sync",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1540, 540],
+      "credentials": {
+        "supabaseApi": {
+          "id": "CONFIGURE_ME",
+          "name": "Supabase API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "status",
+              "value": "success"
+            },
+            {
+              "name": "message",
+              "value": "={{ $json.originalName }} synced to {{ $json.filePath }}"
+            },
+            {
+              "name": "commit_url",
+              "value": "=https://github.com/Insightpulseai-net/pulser-agent-framework/blob/main/{{ $json.filePath }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "response",
+      "name": "Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1760, 380]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Merge Triggers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Drive Trigger": {
+      "main": [
+        [
+          {
+            "node": "Merge Triggers",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Triggers": {
+      "main": [
+        [
+          {
+            "node": "Download as Markdown",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get File Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download as Markdown": {
+      "main": [
+        [
+          {
+            "node": "Prepare Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get File Metadata": {
+      "main": [
+        [
+          {
+            "node": "Prepare Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Content": {
+      "main": [
+        [
+          {
+            "node": "GitHub: Commit File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GitHub: Commit File": {
+      "main": [
+        [
+          {
+            "node": "Mattermost Enabled?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Supabase Enabled?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mattermost Enabled?": {
+      "main": [
+        [
+          {
+            "node": "Mattermost: Notify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase Enabled?": {
+      "main": [
+        [
+          {
+            "node": "Supabase: Log Sync",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "automation",
+      "createdAt": "2024-12-30T00:00:00.000Z",
+      "updatedAt": "2024-12-30T00:00:00.000Z"
+    },
+    {
+      "name": "docs-sync",
+      "createdAt": "2024-12-30T00:00:00.000Z",
+      "updatedAt": "2024-12-30T00:00:00.000Z"
+    }
+  ],
+  "triggerCount": 2,
+  "pinData": {}
+}
