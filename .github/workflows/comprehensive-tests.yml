@@ -9,7 +9,7 @@
 
 name: Comprehensive Tests
 
-on:
+'on':
   push:
     branches: [main, develop, 'feature/**', 'claude/**']
   pull_request:

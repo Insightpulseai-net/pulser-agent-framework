@@ -1,0 +1,162 @@
+# =============================================================================
+# PARITY PROFILE: IPAI Odoo CE 18 + OCA Stack
+# =============================================================================
+# Target implementation profile for AFC Close Manager
+# =============================================================================
+
+target:
+  name: "IPAI Odoo CE 18 + OCA + Supabase + n8n"
+  defaults:
+    status: planned
+    owner: platform
+  owners:
+    platform: "@ipai-platform"
+    localization: "@ipai-localization"
+    frontend: "@ipai-frontend"
+    data: "@ipai-data"
+    qa: "@ipai-qa"
+
+# Override per-item status/notes (update as implementation progresses)
+overrides:
+  # -------------------------------------------------------------------------
+  # CLOSE ORCHESTRATION - Core workflow implemented
+  # -------------------------------------------------------------------------
+  close.calendar_state_machine:
+    status: done
+    notes: "Close calendar state machine implemented with multi-company support"
+    evidence:
+      - "models/close_calendar.py"
+      - "views/close_calendar_views.xml"
+
+  close.task_templates:
+    status: partial
+    notes: "Basic template library exists; auto-generation in progress"
+    evidence:
+      - "models/close_task_template.py"
+
+  close.task_dependencies:
+    status: planned
+    notes: "DAG structure designed; critical path calculation pending"
+
+  close.signoff_chain:
+    status: partial
+    notes: "Basic sign-off exists; e-signature integration pending"
+
+  # -------------------------------------------------------------------------
+  # FINANCE CONTROLS
+  # -------------------------------------------------------------------------
+  controls.gl_balance_validation:
+    status: done
+    notes: "Native Odoo account.move validation"
+    evidence:
+      - "Odoo core: account/models/account_move.py"
+
+  controls.fiscal_lock:
+    status: partial
+    notes: "Using Odoo lock dates; calendar integration pending"
+
+  # -------------------------------------------------------------------------
+  # EVIDENCE & AUDIT
+  # -------------------------------------------------------------------------
+  evidence.document_tracking:
+    status: partial
+    notes: "Basic attachment tracking exists"
+
+  evidence.tb_snapshots:
+    status: planned
+    notes: "TB snapshot model designed"
+
+  # -------------------------------------------------------------------------
+  # INTERCOMPANY
+  # -------------------------------------------------------------------------
+  ic.transaction_tracking:
+    status: planned
+    notes: "OCA inter_company module evaluated"
+
+  # -------------------------------------------------------------------------
+  # PHILIPPINE LOCALIZATION
+  # -------------------------------------------------------------------------
+  ph.bir_1601c:
+    status: partial
+    notes: "Form structure defined; GL mapping in progress"
+    evidence:
+      - "models/bir_form_1601c.py"
+
+  ph.bir_2550q:
+    status: partial
+    notes: "VAT calculation engine implemented"
+
+  ph.tax_engine:
+    status: done
+    notes: "2024 tax brackets implemented with senior/PWD exemptions"
+    evidence:
+      - "tests/conftest.py:ph_tax_brackets_2024"
+
+  ph.gl_mapping:
+    status: partial
+    notes: "Basic mapping exists; bidirectional drill-down pending"
+
+  # -------------------------------------------------------------------------
+  # SEPARATION OF DUTIES
+  # -------------------------------------------------------------------------
+  sod.rbac:
+    status: partial
+    notes: "Basic roles defined; full 8-role matrix pending"
+
+  sod.four_eyes:
+    status: planned
+    notes: "Constraint logic designed"
+
+  sod.conflict_matrix:
+    status: planned
+    notes: "Critical conflicts library being compiled from SoD audit"
+    evidence:
+      - "docs/spectra-pf-sod-recommendation.docx"
+
+  sod.audit_trail:
+    status: partial
+    notes: "Basic audit logging exists; hash-chain pending"
+
+  # -------------------------------------------------------------------------
+  # ACCESS GOVERNANCE
+  # -------------------------------------------------------------------------
+  access.quarterly_review:
+    status: planned
+    notes: "Q1 2026 target per SoD recommendation"
+
+  access.firefighter:
+    status: planned
+    notes: "Emergency access workflow designed"
+
+  # -------------------------------------------------------------------------
+  # RAG AI COPILOT
+  # -------------------------------------------------------------------------
+  copilot.semantic_kb:
+    status: partial
+    notes: "pgvector setup complete; indexing pipeline in progress"
+
+  copilot.context_chat:
+    status: planned
+    notes: "Odoo widget design in progress"
+
+  # -------------------------------------------------------------------------
+  # PROCESS INTELLIGENCE
+  # -------------------------------------------------------------------------
+  pi.event_capture:
+    status: planned
+    notes: "Event log schema designed"
+
+  pi.bottleneck_detection:
+    status: planned
+    notes: "ML model selection in progress"
+
+  # -------------------------------------------------------------------------
+  # CLOSE COCKPIT UI
+  # -------------------------------------------------------------------------
+  ui.cockpit_dashboard:
+    status: planned
+    notes: "Wireframes complete; implementation Q1 2025"
+
+  ui.compliance_view:
+    status: planned
+    notes: "Depends on SoD module completion"

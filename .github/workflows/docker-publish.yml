@@ -1,7 +1,7 @@
 # .github/workflows/docker-publish.yml
 name: Docker - Build & Publish
 
-on:
+'on':
   push:
     branches: [main]
     paths:
