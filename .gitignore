@@ -104,3 +104,10 @@ ssl/
 secrets/
 credentials/
 *.secret
+
+# Supabase (never commit keys/tokens)
+supabase/.env
+.supabase/
+**/supabase-key*
+**/SUPABASE_*
+**/supabase_*.json
