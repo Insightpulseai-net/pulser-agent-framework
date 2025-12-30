@@ -10,21 +10,21 @@ Provides various patterns for coordinating multiple agents including:
 """
 
 from pulser_agents.orchestration.base import (
+    OrchestrationResult,
     Orchestrator,
     OrchestratorConfig,
-    OrchestrationResult,
 )
-from pulser_agents.orchestration.sequential import SequentialOrchestrator
 from pulser_agents.orchestration.concurrent import ConcurrentOrchestrator
 from pulser_agents.orchestration.group_chat import (
-    GroupChatOrchestrator,
     GroupChatConfig,
+    GroupChatOrchestrator,
     SpeakerSelectionMode,
 )
 from pulser_agents.orchestration.handoff import (
     HandoffOrchestrator,
     HandoffStrategy,
 )
+from pulser_agents.orchestration.sequential import SequentialOrchestrator
 
 __all__ = [
     "Orchestrator",

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Optional, Union
+from typing import Any, Union
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -109,9 +109,9 @@ class Message(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     role: MessageRole
     content: MessageContent
-    name: Optional[str] = None
-    tool_calls: Optional[list[ToolCall]] = None
-    tool_call_id: Optional[str] = None
+    name: str | None = None
+    tool_calls: list[ToolCall] | None = None
+    tool_call_id: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -131,8 +131,8 @@ class Message(BaseModel):
     @classmethod
     def assistant(
         cls,
-        content: Optional[str] = None,
-        tool_calls: Optional[list[ToolCall]] = None,
+        content: str | None = None,
+        tool_calls: list[ToolCall] | None = None,
         **kwargs: Any
     ) -> Message:
         """Create an assistant message."""
@@ -236,7 +236,7 @@ class MessageBuilder:
     def __init__(self) -> None:
         self._role: MessageRole = MessageRole.USER
         self._content: list[Any] = []
-        self._name: Optional[str] = None
+        self._name: str | None = None
         self._metadata: dict[str, Any] = {}
 
     def role(self, role: MessageRole) -> MessageBuilder:

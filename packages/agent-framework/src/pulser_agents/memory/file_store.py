@@ -7,10 +7,9 @@ Persistent storage using the local filesystem.
 from __future__ import annotations
 
 import json
-import os
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from pulser_agents.memory.base import MemoryConfig, MemoryEntry, MemoryProvider
 
@@ -39,7 +38,7 @@ class FileMemoryProvider(MemoryProvider):
     def __init__(
         self,
         base_path: str = "./memory_store",
-        config: Optional[MemoryConfig] = None,
+        config: MemoryConfig | None = None,
     ) -> None:
         super().__init__(config)
         self.base_path = Path(base_path)
@@ -56,13 +55,13 @@ class FileMemoryProvider(MemoryProvider):
         safe_key = key.replace("/", "_").replace("\\", "_").replace(":", "_")
         return self.base_path / self.config.namespace / f"{safe_key}.json"
 
-    def _read_entry(self, path: Path) -> Optional[MemoryEntry]:
+    def _read_entry(self, path: Path) -> MemoryEntry | None:
         """Read an entry from a file."""
         if not path.exists():
             return None
 
         try:
-            with open(path, "r") as f:
+            with open(path) as f:
                 data = json.load(f)
 
             entry = MemoryEntry(**data)
@@ -96,7 +95,7 @@ class FileMemoryProvider(MemoryProvider):
         # Atomic rename
         temp_path.rename(path)
 
-    async def get(self, key: str) -> Optional[Any]:
+    async def get(self, key: str) -> Any | None:
         """Get a value from file storage."""
         path = self._get_file_path(key)
         entry = self._read_entry(path)
@@ -113,8 +112,8 @@ class FileMemoryProvider(MemoryProvider):
         self,
         key: str,
         value: Any,
-        ttl: Optional[int] = None,
-        metadata: Optional[dict[str, Any]] = None,
+        ttl: int | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """Set a value in file storage."""
         path = self._get_file_path(key)
@@ -154,7 +153,7 @@ class FileMemoryProvider(MemoryProvider):
             for file in namespace_dir.glob("*.json"):
                 file.unlink()
 
-    async def keys(self, pattern: Optional[str] = None) -> list[str]:
+    async def keys(self, pattern: str | None = None) -> list[str]:
         """List keys matching a pattern."""
         import fnmatch
 
@@ -217,7 +216,7 @@ class JSONLMemoryProvider(MemoryProvider):
     def __init__(
         self,
         file_path: str = "./memory.jsonl",
-        config: Optional[MemoryConfig] = None,
+        config: MemoryConfig | None = None,
     ) -> None:
         super().__init__(config)
         self.file_path = Path(file_path)
@@ -233,7 +232,7 @@ class JSONLMemoryProvider(MemoryProvider):
     def _load_cache(self) -> None:
         """Load all entries into cache."""
         self._cache = {}
-        with open(self.file_path, "r") as f:
+        with open(self.file_path) as f:
             for line in f:
                 line = line.strip()
                 if line:
@@ -251,7 +250,7 @@ class JSONLMemoryProvider(MemoryProvider):
         with open(self.file_path, "a") as f:
             f.write(json.dumps(data, default=str) + "\n")
 
-    async def get(self, key: str) -> Optional[Any]:
+    async def get(self, key: str) -> Any | None:
         """Get a value (loads from file if not cached)."""
         if not self._cache:
             self._load_cache()
@@ -261,8 +260,8 @@ class JSONLMemoryProvider(MemoryProvider):
         self,
         key: str,
         value: Any,
-        ttl: Optional[int] = None,
-        metadata: Optional[dict[str, Any]] = None,
+        ttl: int | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """Set a value by appending to the log."""
         await self.append({
@@ -295,7 +294,7 @@ class JSONLMemoryProvider(MemoryProvider):
             f.write("")
         self._cache = {}
 
-    async def keys(self, pattern: Optional[str] = None) -> list[str]:
+    async def keys(self, pattern: str | None = None) -> list[str]:
         """List all keys."""
         import fnmatch
 
@@ -309,7 +308,7 @@ class JSONLMemoryProvider(MemoryProvider):
     async def iter_records(self) -> list[dict[str, Any]]:
         """Iterate over all records in the log."""
         records = []
-        with open(self.file_path, "r") as f:
+        with open(self.file_path) as f:
             for line in f:
                 line = line.strip()
                 if line:

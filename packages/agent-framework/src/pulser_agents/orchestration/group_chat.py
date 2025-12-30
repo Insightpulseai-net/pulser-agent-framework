@@ -6,8 +6,9 @@ Enables multi-agent conversations with turn-taking and speaker selection.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from enum import Enum
-from typing import Any, Callable, Optional, Union
+from typing import Any
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -15,11 +16,11 @@ from pydantic import BaseModel, Field
 from pulser_agents.core.agent import Agent
 from pulser_agents.core.context import AgentContext
 from pulser_agents.core.exceptions import MaxIterationsError, OrchestrationError
-from pulser_agents.core.message import Message, MessageRole
+from pulser_agents.core.message import Message
 from pulser_agents.orchestration.base import (
+    OrchestrationResult,
     Orchestrator,
     OrchestratorConfig,
-    OrchestrationResult,
 )
 
 
@@ -46,7 +47,7 @@ class GroupChatConfig(OrchestratorConfig):
 
     speaker_selection: SpeakerSelectionMode = SpeakerSelectionMode.AUTO
     allow_repeat: bool = False
-    termination_phrase: Optional[str] = "TERMINATE"
+    termination_phrase: str | None = "TERMINATE"
     max_consecutive_auto: int = 10
     admin_name: str = "Admin"
 
@@ -81,9 +82,9 @@ class GroupChatOrchestrator(Orchestrator):
     def __init__(
         self,
         agents: list[Agent],
-        config: Optional[GroupChatConfig] = None,
-        selector_agent: Optional[Agent] = None,
-        termination_func: Optional[Callable[[str, int], bool]] = None,
+        config: GroupChatConfig | None = None,
+        selector_agent: Agent | None = None,
+        termination_func: Callable[[str, int], bool] | None = None,
     ) -> None:
         """
         Initialize the group chat orchestrator.
@@ -123,7 +124,7 @@ class GroupChatOrchestrator(Orchestrator):
 
         return False
 
-    def _get_next_speaker_round_robin(self, last_speaker: Optional[str]) -> Agent:
+    def _get_next_speaker_round_robin(self, last_speaker: str | None) -> Agent:
         """Get next speaker using round-robin."""
         if not self.group_config.allow_repeat and last_speaker:
             # Find last speaker index and move to next
@@ -136,7 +137,7 @@ class GroupChatOrchestrator(Orchestrator):
         self._current_speaker_idx = (self._current_speaker_idx + 1) % len(self.agents)
         return agent
 
-    def _get_next_speaker_random(self, last_speaker: Optional[str]) -> Agent:
+    def _get_next_speaker_random(self, last_speaker: str | None) -> Agent:
         """Get next speaker randomly."""
         import random
 
@@ -150,7 +151,7 @@ class GroupChatOrchestrator(Orchestrator):
 
     async def _get_next_speaker_auto(
         self,
-        last_speaker: Optional[str],
+        last_speaker: str | None,
         context: AgentContext,
     ) -> Agent:
         """Get next speaker using LLM selection."""
@@ -194,7 +195,7 @@ class GroupChatOrchestrator(Orchestrator):
 
     async def _get_next_speaker(
         self,
-        last_speaker: Optional[str],
+        last_speaker: str | None,
         context: AgentContext,
     ) -> Agent:
         """Get the next speaker based on selection mode."""
@@ -212,8 +213,8 @@ class GroupChatOrchestrator(Orchestrator):
 
     async def run(
         self,
-        message: Union[str, Message],
-        context: Optional[AgentContext] = None,
+        message: str | Message,
+        context: AgentContext | None = None,
         **kwargs: Any,
     ) -> OrchestrationResult:
         """
@@ -244,7 +245,7 @@ class GroupChatOrchestrator(Orchestrator):
             content=initial_content,
         ))
 
-        last_speaker: Optional[str] = None
+        last_speaker: str | None = None
         turn_count = 0
 
         while turn_count < self.config.max_iterations:

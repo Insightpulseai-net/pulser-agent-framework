@@ -6,7 +6,8 @@ Provides integration with Anthropic's Claude models.
 
 from __future__ import annotations
 
-from typing import Any, AsyncIterator, Optional
+from collections.abc import AsyncIterator
+from typing import Any
 
 from pulser_agents.core.base_client import (
     BaseChatClient,
@@ -40,12 +41,12 @@ class AnthropicChatClient(BaseChatClient):
         >>> response = await client.chat([Message.user("Hello!")])
     """
 
-    def __init__(self, config: Optional[ChatClientConfig] = None) -> None:
+    def __init__(self, config: ChatClientConfig | None = None) -> None:
         super().__init__(config)
         # Override default model for Anthropic
         if self.config.model == "gpt-4o":
             self.config.model = "claude-3-5-sonnet-20241022"
-        self._client: Optional[Any] = None
+        self._client: Any | None = None
 
     def _get_client(self) -> Any:
         """Get or create the Anthropic client."""
@@ -71,7 +72,7 @@ class AnthropicChatClient(BaseChatClient):
 
     def _convert_messages(
         self, messages: list[Message]
-    ) -> tuple[Optional[str], list[dict[str, Any]]]:
+    ) -> tuple[str | None, list[dict[str, Any]]]:
         """
         Convert messages to Anthropic format.
 
@@ -173,10 +174,14 @@ class AnthropicChatClient(BaseChatClient):
         try:
             from anthropic import (
                 APIError,
-                AuthenticationError as AnthropicAuthError,
-                RateLimitError as AnthropicRateLimitError,
                 BadRequestError,
                 NotFoundError,
+            )
+            from anthropic import (
+                AuthenticationError as AnthropicAuthError,
+            )
+            from anthropic import (
+                RateLimitError as AnthropicRateLimitError,
             )
         except ImportError:
             raise e
@@ -217,7 +222,7 @@ class AnthropicChatClient(BaseChatClient):
     async def chat(
         self,
         messages: list[Message],
-        tools: Optional[list[ToolDefinition]] = None,
+        tools: list[ToolDefinition] | None = None,
         **kwargs: Any,
     ) -> AgentResponse:
         """Send messages to Anthropic and get a response."""
@@ -273,7 +278,7 @@ class AnthropicChatClient(BaseChatClient):
     async def chat_stream(
         self,
         messages: list[Message],
-        tools: Optional[list[ToolDefinition]] = None,
+        tools: list[ToolDefinition] | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[StreamingChunk]:
         """Stream a response from Anthropic."""
@@ -309,7 +314,7 @@ class AnthropicChatClient(BaseChatClient):
                             )
                     elif event.type == "message_stop":
                         yield StreamingChunk(
-                            id=f"chunk-final",
+                            id="chunk-final",
                             delta="",
                             finish_reason="end_turn",
                         )

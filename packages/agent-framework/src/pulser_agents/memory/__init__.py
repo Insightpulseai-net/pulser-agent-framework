@@ -9,17 +9,17 @@ Provides various memory backends including:
 """
 
 from pulser_agents.memory.base import (
-    MemoryProvider,
     MemoryConfig,
     MemoryEntry,
+    MemoryProvider,
 )
+from pulser_agents.memory.file_store import FileMemoryProvider
 from pulser_agents.memory.in_memory import InMemoryProvider
 from pulser_agents.memory.redis_memory import RedisMemoryProvider
 from pulser_agents.memory.vector_store import (
     VectorMemoryProvider,
     VectorSearchResult,
 )
-from pulser_agents.memory.file_store import FileMemoryProvider
 
 __all__ = [
     "MemoryProvider",

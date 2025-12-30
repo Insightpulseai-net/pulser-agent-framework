@@ -7,7 +7,7 @@ Persistent, distributed memory storage using Redis.
 from __future__ import annotations
 
 import json
-from typing import Any, Optional
+from typing import Any
 
 from pulser_agents.memory.base import MemoryConfig, MemoryProvider
 
@@ -36,13 +36,13 @@ class RedisMemoryProvider(MemoryProvider):
     def __init__(
         self,
         url: str = "redis://localhost:6379",
-        config: Optional[MemoryConfig] = None,
+        config: MemoryConfig | None = None,
         db: int = 0,
     ) -> None:
         super().__init__(config)
         self.url = url
         self.db = db
-        self._client: Optional[Any] = None
+        self._client: Any | None = None
 
     async def _get_client(self) -> Any:
         """Get or create Redis client."""
@@ -66,7 +66,7 @@ class RedisMemoryProvider(MemoryProvider):
         """Serialize value for storage."""
         return json.dumps(value, default=str)
 
-    def _deserialize(self, value: Optional[str]) -> Any:
+    def _deserialize(self, value: str | None) -> Any:
         """Deserialize value from storage."""
         if value is None:
             return None
@@ -75,7 +75,7 @@ class RedisMemoryProvider(MemoryProvider):
         except json.JSONDecodeError:
             return value
 
-    async def get(self, key: str) -> Optional[Any]:
+    async def get(self, key: str) -> Any | None:
         """Get a value from Redis."""
         client = await self._get_client()
         full_key = self._make_key(key)
@@ -86,8 +86,8 @@ class RedisMemoryProvider(MemoryProvider):
         self,
         key: str,
         value: Any,
-        ttl: Optional[int] = None,
-        metadata: Optional[dict[str, Any]] = None,
+        ttl: int | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """Set a value in Redis."""
         client = await self._get_client()
@@ -139,7 +139,7 @@ class RedisMemoryProvider(MemoryProvider):
             if cursor == 0:
                 break
 
-    async def keys(self, pattern: Optional[str] = None) -> list[str]:
+    async def keys(self, pattern: str | None = None) -> list[str]:
         """List keys matching a pattern."""
         client = await self._get_client()
 
@@ -181,7 +181,7 @@ class RedisMemoryProvider(MemoryProvider):
     async def set_many(
         self,
         items: dict[str, Any],
-        ttl: Optional[int] = None,
+        ttl: int | None = None,
     ) -> None:
         """Set multiple values at once using pipeline."""
         if not items:

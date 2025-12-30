@@ -6,7 +6,7 @@ All framework exceptions inherit from AgentError for easy catching.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 
 class AgentError(Exception):
@@ -22,8 +22,8 @@ class AgentError(Exception):
     def __init__(
         self,
         message: str,
-        code: Optional[str] = None,
-        details: Optional[dict[str, Any]] = None
+        code: str | None = None,
+        details: dict[str, Any] | None = None
     ) -> None:
         super().__init__(message)
         self.message = message
@@ -47,8 +47,8 @@ class ProviderError(AgentError):
         self,
         message: str,
         provider: str,
-        status_code: Optional[int] = None,
-        response: Optional[Any] = None,
+        status_code: int | None = None,
+        response: Any | None = None,
         **kwargs: Any
     ) -> None:
         super().__init__(message, **kwargs)
@@ -64,7 +64,7 @@ class RateLimitError(ProviderError):
         self,
         message: str,
         provider: str,
-        retry_after: Optional[float] = None,
+        retry_after: float | None = None,
         **kwargs: Any
     ) -> None:
         super().__init__(message, provider, **kwargs)
@@ -90,8 +90,8 @@ class ContextLengthError(ProviderError):
         self,
         message: str,
         provider: str,
-        max_tokens: Optional[int] = None,
-        actual_tokens: Optional[int] = None,
+        max_tokens: int | None = None,
+        actual_tokens: int | None = None,
         **kwargs: Any
     ) -> None:
         super().__init__(message, provider, **kwargs)
@@ -110,7 +110,7 @@ class ToolError(AgentError):
         self,
         message: str,
         tool_name: str,
-        tool_call_id: Optional[str] = None,
+        tool_call_id: str | None = None,
         **kwargs: Any
     ) -> None:
         super().__init__(message, **kwargs)
@@ -131,7 +131,7 @@ class ToolValidationError(ToolError):
         self,
         message: str,
         tool_name: str,
-        validation_errors: Optional[list[dict[str, Any]]] = None,
+        validation_errors: list[dict[str, Any]] | None = None,
         **kwargs: Any
     ) -> None:
         super().__init__(message, tool_name, **kwargs)
@@ -145,7 +145,7 @@ class ToolExecutionError(ToolError):
         self,
         message: str,
         tool_name: str,
-        original_error: Optional[Exception] = None,
+        original_error: Exception | None = None,
         **kwargs: Any
     ) -> None:
         super().__init__(message, tool_name, **kwargs)
@@ -163,8 +163,8 @@ class OrchestrationError(AgentError):
     def __init__(
         self,
         message: str,
-        orchestrator: Optional[str] = None,
-        agents_involved: Optional[list[str]] = None,
+        orchestrator: str | None = None,
+        agents_involved: list[str] | None = None,
         **kwargs: Any
     ) -> None:
         super().__init__(message, **kwargs)

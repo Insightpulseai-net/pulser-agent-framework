@@ -7,7 +7,8 @@ Provides integration with Azure OpenAI Service.
 from __future__ import annotations
 
 import json
-from typing import Any, AsyncIterator, Optional
+from collections.abc import AsyncIterator
+from typing import Any
 
 from pulser_agents.core.base_client import (
     BaseChatClient,
@@ -45,11 +46,11 @@ class AzureOpenAIChatClient(BaseChatClient):
 
     def __init__(
         self,
-        config: Optional[ChatClientConfig] = None,
+        config: ChatClientConfig | None = None,
         use_azure_ad: bool = False,
     ) -> None:
         super().__init__(config)
-        self._client: Optional[Any] = None
+        self._client: Any | None = None
         self._use_azure_ad = use_azure_ad
 
     def _get_client(self) -> Any:
@@ -126,10 +127,14 @@ class AzureOpenAIChatClient(BaseChatClient):
         try:
             from openai import (
                 APIError,
-                AuthenticationError as OpenAIAuthError,
-                RateLimitError as OpenAIRateLimitError,
                 BadRequestError,
                 NotFoundError,
+            )
+            from openai import (
+                AuthenticationError as OpenAIAuthError,
+            )
+            from openai import (
+                RateLimitError as OpenAIRateLimitError,
             )
         except ImportError:
             raise e
@@ -175,7 +180,7 @@ class AzureOpenAIChatClient(BaseChatClient):
     async def chat(
         self,
         messages: list[Message],
-        tools: Optional[list[ToolDefinition]] = None,
+        tools: list[ToolDefinition] | None = None,
         **kwargs: Any,
     ) -> AgentResponse:
         """Send messages to Azure OpenAI and get a response."""
@@ -238,7 +243,7 @@ class AzureOpenAIChatClient(BaseChatClient):
     async def chat_stream(
         self,
         messages: list[Message],
-        tools: Optional[list[ToolDefinition]] = None,
+        tools: list[ToolDefinition] | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[StreamingChunk]:
         """Stream a response from Azure OpenAI."""

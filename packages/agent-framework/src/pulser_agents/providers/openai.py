@@ -7,7 +7,8 @@ Provides integration with OpenAI's GPT models.
 from __future__ import annotations
 
 import json
-from typing import Any, AsyncIterator, Optional
+from collections.abc import AsyncIterator
+from typing import Any
 
 from pulser_agents.core.base_client import (
     BaseChatClient,
@@ -21,7 +22,7 @@ from pulser_agents.core.exceptions import (
     ProviderError,
     RateLimitError,
 )
-from pulser_agents.core.message import Message, MessageRole, ToolCall
+from pulser_agents.core.message import Message, ToolCall
 from pulser_agents.core.response import AgentResponse, StreamingChunk, Usage
 
 
@@ -41,9 +42,9 @@ class OpenAIChatClient(BaseChatClient):
         >>> response = await client.chat([Message.user("Hello!")])
     """
 
-    def __init__(self, config: Optional[ChatClientConfig] = None) -> None:
+    def __init__(self, config: ChatClientConfig | None = None) -> None:
         super().__init__(config)
-        self._client: Optional[Any] = None
+        self._client: Any | None = None
 
     def _get_client(self) -> Any:
         """Get or create the OpenAI client."""
@@ -104,10 +105,14 @@ class OpenAIChatClient(BaseChatClient):
         try:
             from openai import (
                 APIError,
-                AuthenticationError as OpenAIAuthError,
-                RateLimitError as OpenAIRateLimitError,
                 BadRequestError,
                 NotFoundError,
+            )
+            from openai import (
+                AuthenticationError as OpenAIAuthError,
+            )
+            from openai import (
+                RateLimitError as OpenAIRateLimitError,
             )
         except ImportError:
             raise e
@@ -148,7 +153,7 @@ class OpenAIChatClient(BaseChatClient):
     async def chat(
         self,
         messages: list[Message],
-        tools: Optional[list[ToolDefinition]] = None,
+        tools: list[ToolDefinition] | None = None,
         **kwargs: Any,
     ) -> AgentResponse:
         """Send messages to OpenAI and get a response."""
@@ -211,7 +216,7 @@ class OpenAIChatClient(BaseChatClient):
     async def chat_stream(
         self,
         messages: list[Message],
-        tools: Optional[list[ToolDefinition]] = None,
+        tools: list[ToolDefinition] | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[StreamingChunk]:
         """Stream a response from OpenAI."""

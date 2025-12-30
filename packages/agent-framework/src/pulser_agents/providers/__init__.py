@@ -8,10 +8,10 @@ Provides chat clients for various LLM providers including:
 - Ollama (local models)
 """
 
-from pulser_agents.providers.openai import OpenAIChatClient
-from pulser_agents.providers.azure import AzureOpenAIChatClient
 from pulser_agents.providers.anthropic import AnthropicChatClient
+from pulser_agents.providers.azure import AzureOpenAIChatClient
 from pulser_agents.providers.ollama import OllamaChatClient
+from pulser_agents.providers.openai import OpenAIChatClient
 
 __all__ = [
     "OpenAIChatClient",

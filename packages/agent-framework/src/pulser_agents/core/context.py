@@ -7,7 +7,7 @@ Provides conversation history tracking, context windowing, and metadata storage.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -35,9 +35,9 @@ class ConversationHistory(BaseModel):
 
     id: str = Field(default_factory=lambda: str(uuid4()))
     messages: list[Message] = Field(default_factory=list)
-    max_messages: Optional[int] = None
-    max_tokens: Optional[int] = None
-    summary: Optional[str] = None
+    max_messages: int | None = None
+    max_tokens: int | None = None
+    summary: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
@@ -70,7 +70,7 @@ class ConversationHistory(BaseModel):
     def get_messages(
         self,
         include_system: bool = True,
-        last_n: Optional[int] = None
+        last_n: int | None = None
     ) -> list[Message]:
         """Get messages from history."""
         messages = self.messages
@@ -83,7 +83,7 @@ class ConversationHistory(BaseModel):
 
         return messages
 
-    def get_system_message(self) -> Optional[Message]:
+    def get_system_message(self) -> Message | None:
         """Get the system message if present."""
         for msg in self.messages:
             if msg.role == MessageRole.SYSTEM:
@@ -132,12 +132,12 @@ class AgentContext(BaseModel):
     """
 
     conversation_id: str = Field(default_factory=lambda: str(uuid4()))
-    user_id: Optional[str] = None
-    session_id: Optional[str] = None
+    user_id: str | None = None
+    session_id: str | None = None
     history: ConversationHistory = Field(default_factory=ConversationHistory)
     variables: dict[str, Any] = Field(default_factory=dict)
     metadata: dict[str, Any] = Field(default_factory=dict)
-    parent_context: Optional[AgentContext] = None
+    parent_context: AgentContext | None = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     class Config:
@@ -207,7 +207,7 @@ class ContextManager:
         self._contexts[context.conversation_id] = context
         return context
 
-    def get(self, conversation_id: str) -> Optional[AgentContext]:
+    def get(self, conversation_id: str) -> AgentContext | None:
         """Get a context by conversation ID."""
         return self._contexts.get(conversation_id)
 

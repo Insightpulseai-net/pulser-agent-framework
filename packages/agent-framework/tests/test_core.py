@@ -2,32 +2,29 @@
 Tests for core agent framework components.
 """
 
-import pytest
-from datetime import datetime
 
+import pytest
+
+from pulser_agents.core.context import (
+    AgentContext,
+    ContextManager,
+    ConversationHistory,
+)
+from pulser_agents.core.exceptions import (
+    AgentError,
+    ProviderError,
+    ToolNotFoundError,
+)
 from pulser_agents.core.message import (
     Message,
-    MessageRole,
     MessageBuilder,
-    TextContent,
+    MessageRole,
     ToolCall,
 )
 from pulser_agents.core.response import (
     AgentResponse,
     RunResult,
-    StreamingChunk,
     Usage,
-)
-from pulser_agents.core.context import (
-    AgentContext,
-    ConversationHistory,
-    ContextManager,
-)
-from pulser_agents.core.exceptions import (
-    AgentError,
-    ProviderError,
-    ToolError,
-    ToolNotFoundError,
 )
 
 
@@ -282,7 +279,7 @@ class TestUsage:
 
     def test_cost_estimate(self):
         usage = Usage(prompt_tokens=1000, completion_tokens=500, total_tokens=1500)
-        assert usage.cost_estimate == 0.015  # $0.01 per 1K tokens
+        assert abs(usage.cost_estimate - 0.015) < 1e-10  # $0.01 per 1K tokens
 
 
 class TestExceptions:

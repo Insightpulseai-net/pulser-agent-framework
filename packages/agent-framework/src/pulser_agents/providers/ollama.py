@@ -7,7 +7,8 @@ Provides integration with locally-hosted models via Ollama.
 from __future__ import annotations
 
 import json
-from typing import Any, AsyncIterator, Optional
+from collections.abc import AsyncIterator
+from typing import Any
 
 from pulser_agents.core.base_client import (
     BaseChatClient,
@@ -38,14 +39,14 @@ class OllamaChatClient(BaseChatClient):
         >>> response = await client.chat([Message.user("Hello!")])
     """
 
-    def __init__(self, config: Optional[ChatClientConfig] = None) -> None:
+    def __init__(self, config: ChatClientConfig | None = None) -> None:
         super().__init__(config)
         # Override default model for Ollama
         if self.config.model == "gpt-4o":
             self.config.model = "llama3.2"
         if not self.config.base_url:
             self.config.base_url = "http://localhost:11434"
-        self._client: Optional[Any] = None
+        self._client: Any | None = None
 
     def _get_client(self) -> Any:
         """Get or create the Ollama client."""
@@ -106,7 +107,7 @@ class OllamaChatClient(BaseChatClient):
     async def chat(
         self,
         messages: list[Message],
-        tools: Optional[list[ToolDefinition]] = None,
+        tools: list[ToolDefinition] | None = None,
         **kwargs: Any,
     ) -> AgentResponse:
         """Send messages to Ollama and get a response."""
@@ -172,7 +173,7 @@ class OllamaChatClient(BaseChatClient):
     async def chat_stream(
         self,
         messages: list[Message],
-        tools: Optional[list[ToolDefinition]] = None,
+        tools: list[ToolDefinition] | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[StreamingChunk]:
         """Stream a response from Ollama."""
@@ -243,7 +244,7 @@ class OllamaChatClient(BaseChatClient):
         self,
         text: str,
         tools: list[ToolDefinition],
-    ) -> Optional[list[ToolCall]]:
+    ) -> list[ToolCall] | None:
         """
         Try to parse tool calls from model output text.
 

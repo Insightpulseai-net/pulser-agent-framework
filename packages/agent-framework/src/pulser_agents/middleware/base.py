@@ -7,15 +7,16 @@ Defines the middleware pattern for intercepting agent operations.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from datetime import datetime
-from typing import Any, Callable, Optional, Union
+from typing import Any
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
 from pulser_agents.core.context import AgentContext
 from pulser_agents.core.message import Message
-from pulser_agents.core.response import AgentResponse, RunResult
+from pulser_agents.core.response import RunResult
 
 
 class MiddlewareContext(BaseModel):
@@ -37,13 +38,13 @@ class MiddlewareContext(BaseModel):
     """
 
     request_id: str = Field(default_factory=lambda: str(uuid4()))
-    agent_name: Optional[str] = None
-    input_message: Optional[Union[str, Message]] = None
-    context: Optional[AgentContext] = None
+    agent_name: str | None = None
+    input_message: str | Message | None = None
+    context: AgentContext | None = None
     start_time: datetime = Field(default_factory=datetime.utcnow)
     metadata: dict[str, Any] = Field(default_factory=dict)
-    response: Optional[RunResult] = None
-    error: Optional[Exception] = None
+    response: RunResult | None = None
+    error: Exception | None = None
 
     class Config:
         arbitrary_types_allowed = True

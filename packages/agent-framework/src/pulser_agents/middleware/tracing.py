@@ -6,8 +6,9 @@ Provides distributed tracing and observability.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
-from typing import Any, Callable, Optional
+from typing import Any
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -21,11 +22,11 @@ class Span(BaseModel):
 
     trace_id: str
     span_id: str = Field(default_factory=lambda: str(uuid4())[:16])
-    parent_span_id: Optional[str] = None
+    parent_span_id: str | None = None
     operation_name: str
     start_time: datetime = Field(default_factory=datetime.utcnow)
-    end_time: Optional[datetime] = None
-    duration_ms: Optional[float] = None
+    end_time: datetime | None = None
+    duration_ms: float | None = None
     status: str = "ok"
     tags: dict[str, Any] = Field(default_factory=dict)
     logs: list[dict[str, Any]] = Field(default_factory=list)
@@ -54,13 +55,13 @@ class TraceContext(BaseModel):
 
     trace_id: str = Field(default_factory=lambda: str(uuid4()))
     spans: list[Span] = Field(default_factory=list)
-    current_span: Optional[Span] = None
+    current_span: Span | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
     def start_span(
         self,
         operation_name: str,
-        parent_span: Optional[Span] = None,
+        parent_span: Span | None = None,
     ) -> Span:
         """Start a new span."""
         span = Span(
@@ -104,7 +105,7 @@ class TracingMiddleware(Middleware):
     def __init__(
         self,
         service_name: str = "pulser-agents",
-        exporter: Optional[Callable[[TraceContext], Any]] = None,
+        exporter: Callable[[TraceContext], Any] | None = None,
         sample_rate: float = 1.0,
     ) -> None:
         """
@@ -202,15 +203,15 @@ class OpenTelemetryMiddleware(Middleware):
         service_name: str = "pulser-agents",
     ) -> None:
         self.service_name = service_name
-        self._tracer: Optional[Any] = None
+        self._tracer: Any | None = None
 
     def _get_tracer(self) -> Any:
         """Get or create OpenTelemetry tracer."""
         if self._tracer is None:
             try:
                 from opentelemetry import trace
-                from opentelemetry.sdk.trace import TracerProvider
                 from opentelemetry.sdk.resources import Resource
+                from opentelemetry.sdk.trace import TracerProvider
 
                 resource = Resource.create({"service.name": self.service_name})
                 provider = TracerProvider(resource=resource)
@@ -235,7 +236,6 @@ class OpenTelemetryMiddleware(Middleware):
             # OpenTelemetry not available, pass through
             return await next_handler(ctx)
 
-        from opentelemetry import trace
         from opentelemetry.trace import Status, StatusCode
 
         with tracer.start_as_current_span(
