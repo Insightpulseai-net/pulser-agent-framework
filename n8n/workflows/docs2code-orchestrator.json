@@ -1,0 +1,561 @@
+{
+  "name": "Docs2Code Pipeline Orchestrator",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * 1"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Weekly Trigger (Monday 8AM)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [200, 300],
+      "notes": "Triggers weekly documentation extraction"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "docs2code-manual",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "manual-trigger",
+      "name": "Manual Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [200, 500],
+      "webhookId": "docs2code-manual",
+      "notes": "Manual trigger via webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "stage-check",
+              "leftValue": "={{ $json.stage }}",
+              "rightValue": "ingest",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "stage-router",
+      "name": "Route by Stage",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [400, 400]
+    },
+    {
+      "parameters": {
+        "command": "./scripts/docs2code ingest",
+        "cwd": "/opt/pulser-agent-framework",
+        "timeout": 600
+      },
+      "id": "run-ingest",
+      "name": "Run: ./scripts/docs2code ingest",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [600, 300],
+      "notes": "DocumentationParser Agent"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "ingest-success",
+              "leftValue": "={{ $json.exitCode }}",
+              "rightValue": "0",
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-ingest",
+      "name": "Ingest Success?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [800, 300]
+    },
+    {
+      "parameters": {
+        "command": "./scripts/docs2code build",
+        "cwd": "/opt/pulser-agent-framework",
+        "timeout": 600
+      },
+      "id": "run-build",
+      "name": "Run: ./scripts/docs2code build",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1000, 250],
+      "notes": "Compliance → CodeGen → SQL → Validation"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "build-success",
+              "leftValue": "={{ $json.exitCode }}",
+              "rightValue": "0",
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-build",
+      "name": "Build Success?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1200, 250]
+    },
+    {
+      "parameters": {
+        "command": "./scripts/docs2code release",
+        "cwd": "/opt/pulser-agent-framework",
+        "timeout": 300
+      },
+      "id": "run-release",
+      "name": "Run: ./scripts/docs2code release",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1400, 200],
+      "notes": "DeploymentOrchestrator Agent"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "release-success",
+              "leftValue": "={{ $json.exitCode }}",
+              "rightValue": "0",
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-release",
+      "name": "Release Success?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1600, 200]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $env.ALERT_EMAIL }}",
+        "subject": "Docs2Code Pipeline: SUCCESS",
+        "message": "Pipeline completed successfully.\n\nStages:\n- Ingest: PASS\n- Build: PASS\n- Release: PASS\n\nDeployment ID: {{ $json.deploymentId }}\n\nTimestamp: {{ $now.format('YYYY-MM-DD HH:mm:ss') }}"
+      },
+      "id": "success-email",
+      "name": "Send Success Notification",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1800, 150],
+      "notes": "Pipeline success notification"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $env.ALERT_EMAIL }}",
+        "subject": "Docs2Code Pipeline: FAILED at {{ $json.failedStage }}",
+        "message": "Pipeline failed.\n\nFailed Stage: {{ $json.failedStage }}\nError: {{ $json.stderr }}\n\nTimestamp: {{ $now.format('YYYY-MM-DD HH:mm:ss') }}\n\nPlease review logs at:\n/opt/pulser-agent-framework/logs/"
+      },
+      "id": "failure-email",
+      "name": "Send Failure Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1400, 500],
+      "notes": "Pipeline failure alert"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.AGENTBENCH_URL }}/api/dpo-pairs",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.AGENTBENCH_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "agent_name",
+              "value": "={{ $json.failedStage }}"
+            },
+            {
+              "name": "failure_scenario",
+              "value": "Pipeline failure at {{ $json.failedStage }}"
+            },
+            {
+              "name": "preferred_output",
+              "value": "Successful completion"
+            },
+            {
+              "name": "dispreferred_output",
+              "value": "={{ $json.stderr }}"
+            },
+            {
+              "name": "priority",
+              "value": "0.8"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "emit-dpo-pair",
+      "name": "Emit DPO Pair to Agentbench",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1600, 500],
+      "notes": "Send failure context for agent hardening"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "failedStage",
+              "value": "ingest"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-ingest-failed",
+      "name": "Set: Ingest Failed",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [1000, 400]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "failedStage",
+              "value": "build"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-build-failed",
+      "name": "Set: Build Failed",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [1400, 350]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "failedStage",
+              "value": "release"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-release-failed",
+      "name": "Set: Release Failed",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [1800, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { status: 'completed', deployment_id: $json.deploymentId } }}"
+      },
+      "id": "webhook-response-success",
+      "name": "Respond: Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2000, 150]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { status: 'failed', stage: $json.failedStage, error: $json.stderr } }}",
+        "options": {
+          "responseCode": 500
+        }
+      },
+      "id": "webhook-response-failure",
+      "name": "Respond: Failure",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1800, 600]
+    }
+  ],
+  "connections": {
+    "Weekly Trigger (Monday 8AM)": {
+      "main": [
+        [
+          {
+            "node": "Run: ./scripts/docs2code ingest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Route by Stage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Stage": {
+      "main": [
+        [
+          {
+            "node": "Run: ./scripts/docs2code ingest",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Run: ./scripts/docs2code build",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run: ./scripts/docs2code ingest": {
+      "main": [
+        [
+          {
+            "node": "Ingest Success?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ingest Success?": {
+      "main": [
+        [
+          {
+            "node": "Run: ./scripts/docs2code build",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set: Ingest Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run: ./scripts/docs2code build": {
+      "main": [
+        [
+          {
+            "node": "Build Success?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Success?": {
+      "main": [
+        [
+          {
+            "node": "Run: ./scripts/docs2code release",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set: Build Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run: ./scripts/docs2code release": {
+      "main": [
+        [
+          {
+            "node": "Release Success?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Release Success?": {
+      "main": [
+        [
+          {
+            "node": "Send Success Notification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set: Release Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Success Notification": {
+      "main": [
+        [
+          {
+            "node": "Respond: Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set: Ingest Failed": {
+      "main": [
+        [
+          {
+            "node": "Send Failure Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set: Build Failed": {
+      "main": [
+        [
+          {
+            "node": "Send Failure Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set: Release Failed": {
+      "main": [
+        [
+          {
+            "node": "Send Failure Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Failure Alert": {
+      "main": [
+        [
+          {
+            "node": "Emit DPO Pair to Agentbench",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Emit DPO Pair to Agentbench": {
+      "main": [
+        [
+          {
+            "node": "Respond: Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateId": "docs2code-pipeline",
+    "instanceId": "docs2code"
+  },
+  "pinData": {},
+  "tags": [
+    {
+      "id": "1",
+      "name": "docs2code"
+    },
+    {
+      "id": "2",
+      "name": "automation"
+    }
+  ]
+}
