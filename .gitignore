@@ -73,6 +73,9 @@ coverage.xml
 # Docker
 .docker/
 
+# Proof harness artifacts (generated)
+artifacts/
+
 # Backups (local)
 backups/
 *.bak
