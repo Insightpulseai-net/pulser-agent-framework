@@ -1,0 +1,455 @@
+# GENERATED FILE - DO NOT EDIT MANUALLY
+# Source: InsightPulse AI Platform Event Specifications
+# Generated: 2026-01-01T00:00:00Z
+# Regenerate: make generate-spec
+asyncapi: 3.0.0
+info:
+  title: InsightPulse AI Platform Events
+  version: 1.0.0
+  description: |
+    Event-driven architecture for InsightPulse AI Platform.
+    Covers document processing, artifact ingestion, code generation,
+    and agent orchestration events.
+  contact:
+    name: InsightPulse AI
+    url: https://insightpulseai.net
+  license:
+    name: AGPL-3.0
+    url: https://www.gnu.org/licenses/agpl-3.0.html
+
+servers:
+  production:
+    host: events.insightpulseai.net:9092
+    protocol: kafka
+    description: Production Kafka cluster
+  development:
+    host: localhost:9092
+    protocol: kafka
+    description: Local development Kafka
+
+defaultContentType: application/json
+
+channels:
+  document.ingested:
+    address: ipai.documents.ingested
+    messages:
+      documentIngested:
+        $ref: '#/components/messages/DocumentIngested'
+    description: Emitted when a document is successfully ingested
+
+  document.processed:
+    address: ipai.documents.processed
+    messages:
+      documentProcessed:
+        $ref: '#/components/messages/DocumentProcessed'
+    description: Emitted when document processing is complete
+
+  document.failed:
+    address: ipai.documents.failed
+    messages:
+      documentFailed:
+        $ref: '#/components/messages/DocumentFailed'
+    description: Emitted when document processing fails
+
+  artifact.received:
+    address: ipai.artifacts.received
+    messages:
+      artifactReceived:
+        $ref: '#/components/messages/ArtifactReceived'
+    description: Emitted when an artifact envelope is received
+
+  artifact.routed:
+    address: ipai.artifacts.routed
+    messages:
+      artifactRouted:
+        $ref: '#/components/messages/ArtifactRouted'
+    description: Emitted when an artifact is routed to a pipeline
+
+  artifact.blocked:
+    address: ipai.artifacts.blocked
+    messages:
+      artifactBlocked:
+        $ref: '#/components/messages/ArtifactBlocked'
+    description: Emitted when an artifact fails envelope validation
+
+  codegen.started:
+    address: ipai.codegen.started
+    messages:
+      codegenStarted:
+        $ref: '#/components/messages/CodegenStarted'
+    description: Emitted when code generation starts
+
+  codegen.completed:
+    address: ipai.codegen.completed
+    messages:
+      codegenCompleted:
+        $ref: '#/components/messages/CodegenCompleted'
+    description: Emitted when code generation completes
+
+  codegen.failed:
+    address: ipai.codegen.failed
+    messages:
+      codegenFailed:
+        $ref: '#/components/messages/CodegenFailed'
+    description: Emitted when code generation fails
+
+  agent.run.started:
+    address: ipai.agents.run.started
+    messages:
+      agentRunStarted:
+        $ref: '#/components/messages/AgentRunStarted'
+    description: Emitted when an agent run starts
+
+  agent.run.completed:
+    address: ipai.agents.run.completed
+    messages:
+      agentRunCompleted:
+        $ref: '#/components/messages/AgentRunCompleted'
+    description: Emitted when an agent run completes
+
+  model.training.started:
+    address: ipai.ml.training.started
+    messages:
+      trainingStarted:
+        $ref: '#/components/messages/TrainingStarted'
+    description: Emitted when model training starts
+
+  model.training.completed:
+    address: ipai.ml.training.completed
+    messages:
+      trainingCompleted:
+        $ref: '#/components/messages/TrainingCompleted'
+    description: Emitted when model training completes
+
+operations:
+  onDocumentIngested:
+    action: receive
+    channel:
+      $ref: '#/channels/document.ingested'
+    summary: Handle document ingestion events
+
+  onArtifactReceived:
+    action: receive
+    channel:
+      $ref: '#/channels/artifact.received'
+    summary: Handle artifact reception and routing
+
+  publishCodegenCompleted:
+    action: send
+    channel:
+      $ref: '#/channels/codegen.completed'
+    summary: Publish code generation completion events
+
+components:
+  messages:
+    DocumentIngested:
+      name: DocumentIngested
+      title: Document Ingested Event
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/DocumentIngestedPayload'
+
+    DocumentProcessed:
+      name: DocumentProcessed
+      title: Document Processed Event
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/DocumentProcessedPayload'
+
+    DocumentFailed:
+      name: DocumentFailed
+      title: Document Failed Event
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/DocumentFailedPayload'
+
+    ArtifactReceived:
+      name: ArtifactReceived
+      title: Artifact Received Event
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/ArtifactReceivedPayload'
+
+    ArtifactRouted:
+      name: ArtifactRouted
+      title: Artifact Routed Event
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/ArtifactRoutedPayload'
+
+    ArtifactBlocked:
+      name: ArtifactBlocked
+      title: Artifact Blocked Event
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/ArtifactBlockedPayload'
+
+    CodegenStarted:
+      name: CodegenStarted
+      title: Code Generation Started Event
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/CodegenStartedPayload'
+
+    CodegenCompleted:
+      name: CodegenCompleted
+      title: Code Generation Completed Event
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/CodegenCompletedPayload'
+
+    CodegenFailed:
+      name: CodegenFailed
+      title: Code Generation Failed Event
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/CodegenFailedPayload'
+
+    AgentRunStarted:
+      name: AgentRunStarted
+      title: Agent Run Started Event
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/AgentRunStartedPayload'
+
+    AgentRunCompleted:
+      name: AgentRunCompleted
+      title: Agent Run Completed Event
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/AgentRunCompletedPayload'
+
+    TrainingStarted:
+      name: TrainingStarted
+      title: Model Training Started Event
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/TrainingStartedPayload'
+
+    TrainingCompleted:
+      name: TrainingCompleted
+      title: Model Training Completed Event
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/TrainingCompletedPayload'
+
+  schemas:
+    EventMetadata:
+      type: object
+      required: [event_id, timestamp, source]
+      properties:
+        event_id:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+        source:
+          type: string
+        correlation_id:
+          type: string
+          format: uuid
+
+    DocumentIngestedPayload:
+      allOf:
+        - $ref: '#/components/schemas/EventMetadata'
+        - type: object
+          required: [document_id, name, mime_type]
+          properties:
+            document_id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            mime_type:
+              type: string
+            size_bytes:
+              type: integer
+            content_hash:
+              type: string
+
+    DocumentProcessedPayload:
+      allOf:
+        - $ref: '#/components/schemas/EventMetadata'
+        - type: object
+          required: [document_id, chunks_count]
+          properties:
+            document_id:
+              type: string
+              format: uuid
+            chunks_count:
+              type: integer
+            embeddings_generated:
+              type: boolean
+            processing_duration_ms:
+              type: integer
+
+    DocumentFailedPayload:
+      allOf:
+        - $ref: '#/components/schemas/EventMetadata'
+        - type: object
+          required: [document_id, error_code, error_message]
+          properties:
+            document_id:
+              type: string
+              format: uuid
+            error_code:
+              type: string
+            error_message:
+              type: string
+            retryable:
+              type: boolean
+
+    ArtifactReceivedPayload:
+      allOf:
+        - $ref: '#/components/schemas/EventMetadata'
+        - type: object
+          required: [artifact_id, artifact_type, intent]
+          properties:
+            artifact_id:
+              type: string
+              format: uuid
+            artifact_type:
+              type: string
+            intent:
+              type: string
+            content_sha256:
+              type: string
+
+    ArtifactRoutedPayload:
+      allOf:
+        - $ref: '#/components/schemas/EventMetadata'
+        - type: object
+          required: [artifact_id, routed_to, run_id]
+          properties:
+            artifact_id:
+              type: string
+              format: uuid
+            routed_to:
+              type: string
+            run_id:
+              type: string
+              format: uuid
+
+    ArtifactBlockedPayload:
+      allOf:
+        - $ref: '#/components/schemas/EventMetadata'
+        - type: object
+          required: [artifact_id, reason, missing_fields]
+          properties:
+            artifact_id:
+              type: string
+              format: uuid
+            reason:
+              type: string
+            missing_fields:
+              type: array
+              items:
+                type: string
+
+    CodegenStartedPayload:
+      allOf:
+        - $ref: '#/components/schemas/EventMetadata'
+        - type: object
+          required: [run_id, spec_type, target_language]
+          properties:
+            run_id:
+              type: string
+              format: uuid
+            spec_type:
+              type: string
+            target_language:
+              type: string
+
+    CodegenCompletedPayload:
+      allOf:
+        - $ref: '#/components/schemas/EventMetadata'
+        - type: object
+          required: [run_id, files_generated]
+          properties:
+            run_id:
+              type: string
+              format: uuid
+            files_generated:
+              type: integer
+            duration_ms:
+              type: integer
+
+    CodegenFailedPayload:
+      allOf:
+        - $ref: '#/components/schemas/EventMetadata'
+        - type: object
+          required: [run_id, error_code, error_message]
+          properties:
+            run_id:
+              type: string
+              format: uuid
+            error_code:
+              type: string
+            error_message:
+              type: string
+
+    AgentRunStartedPayload:
+      allOf:
+        - $ref: '#/components/schemas/EventMetadata'
+        - type: object
+          required: [run_id, agent_id]
+          properties:
+            run_id:
+              type: string
+              format: uuid
+            agent_id:
+              type: string
+            input_summary:
+              type: string
+
+    AgentRunCompletedPayload:
+      allOf:
+        - $ref: '#/components/schemas/EventMetadata'
+        - type: object
+          required: [run_id, agent_id, status]
+          properties:
+            run_id:
+              type: string
+              format: uuid
+            agent_id:
+              type: string
+            status:
+              type: string
+              enum: [completed, failed, timeout]
+            duration_ms:
+              type: integer
+
+    TrainingStartedPayload:
+      allOf:
+        - $ref: '#/components/schemas/EventMetadata'
+        - type: object
+          required: [run_id, model_type, dataset_version]
+          properties:
+            run_id:
+              type: string
+              format: uuid
+            model_type:
+              type: string
+            dataset_version:
+              type: string
+            config_hash:
+              type: string
+
+    TrainingCompletedPayload:
+      allOf:
+        - $ref: '#/components/schemas/EventMetadata'
+        - type: object
+          required: [run_id, model_artifact_uri]
+          properties:
+            run_id:
+              type: string
+              format: uuid
+            model_artifact_uri:
+              type: string
+            metrics:
+              type: object
+              additionalProperties:
+                type: number
+            duration_seconds:
+              type: integer

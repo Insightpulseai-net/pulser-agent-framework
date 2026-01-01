@@ -1,0 +1,206 @@
+// GENERATED FILE - DO NOT EDIT MANUALLY
+// Source: InsightPulse AI Platform Protobuf Definitions
+// Generated: 2026-01-01T00:00:00Z
+// Regenerate: make generate-proto
+
+syntax = "proto3";
+
+package ipai.artifact.v1;
+
+option go_package = "github.com/insightpulseai/ipai-proto/artifact/v1;artifactv1";
+option java_package = "net.insightpulseai.proto.artifact.v1";
+option java_multiple_files = true;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+// ArtifactService provides artifact management operations
+service ArtifactService {
+  // Ingest a new artifact with envelope
+  rpc IngestArtifact(IngestArtifactRequest) returns (IngestArtifactResponse);
+
+  // Get artifact by ID
+  rpc GetArtifact(GetArtifactRequest) returns (Artifact);
+
+  // List artifacts with filtering
+  rpc ListArtifacts(ListArtifactsRequest) returns (ListArtifactsResponse);
+
+  // Stream artifact processing events
+  rpc WatchArtifact(WatchArtifactRequest) returns (stream ArtifactEvent);
+}
+
+// Artifact type enumeration
+enum ArtifactType {
+  ARTIFACT_TYPE_UNSPECIFIED = 0;
+  ARTIFACT_TYPE_DOC = 1;
+  ARTIFACT_TYPE_PDF = 2;
+  ARTIFACT_TYPE_CSV = 3;
+  ARTIFACT_TYPE_SQL = 4;
+  ARTIFACT_TYPE_OPENAPI = 5;
+  ARTIFACT_TYPE_JSON_SCHEMA = 6;
+  ARTIFACT_TYPE_CODE = 7;
+  ARTIFACT_TYPE_LOGS = 8;
+  ARTIFACT_TYPE_DATASET = 9;
+  ARTIFACT_TYPE_PROTOBUF = 10;
+  ARTIFACT_TYPE_ASYNCAPI = 11;
+  ARTIFACT_TYPE_GRAPHQL = 12;
+}
+
+// Intent enumeration
+enum ArtifactIntent {
+  ARTIFACT_INTENT_UNSPECIFIED = 0;
+  ARTIFACT_INTENT_TRAIN = 1;
+  ARTIFACT_INTENT_EVAL = 2;
+  ARTIFACT_INTENT_ETL = 3;
+  ARTIFACT_INTENT_DOCS2CODE = 4;
+  ARTIFACT_INTENT_DEBUG = 5;
+  ARTIFACT_INTENT_RELEASE = 6;
+}
+
+// Target enumeration
+enum ArtifactTarget {
+  ARTIFACT_TARGET_UNSPECIFIED = 0;
+  ARTIFACT_TARGET_ML = 1;
+  ARTIFACT_TARGET_ODOO = 2;
+  ARTIFACT_TARGET_SUPERSET = 3;
+  ARTIFACT_TARGET_WORKBENCH = 4;
+}
+
+// Source enumeration
+enum ArtifactSource {
+  ARTIFACT_SOURCE_UNSPECIFIED = 0;
+  ARTIFACT_SOURCE_ODOO = 1;
+  ARTIFACT_SOURCE_SUPABASE = 2;
+  ARTIFACT_SOURCE_GDRIVE = 3;
+  ARTIFACT_SOURCE_MANUAL = 4;
+  ARTIFACT_SOURCE_AGENT = 5;
+}
+
+// Status enumeration
+enum ArtifactStatus {
+  ARTIFACT_STATUS_UNSPECIFIED = 0;
+  ARTIFACT_STATUS_PENDING = 1;
+  ARTIFACT_STATUS_ROUTED = 2;
+  ARTIFACT_STATUS_PROCESSING = 3;
+  ARTIFACT_STATUS_COMPLETED = 4;
+  ARTIFACT_STATUS_FAILED = 5;
+  ARTIFACT_STATUS_BLOCKED = 6;
+}
+
+// PII status enumeration
+enum PiiStatus {
+  PII_STATUS_UNKNOWN = 0;
+  PII_STATUS_NONE = 1;
+  PII_STATUS_PRESENT = 2;
+}
+
+// Allowed operation enumeration
+enum AllowedOp {
+  ALLOWED_OP_UNSPECIFIED = 0;
+  ALLOWED_OP_PARSE = 1;
+  ALLOWED_OP_INDEX = 2;
+  ALLOWED_OP_TRAIN = 3;
+  ALLOWED_OP_EVAL = 4;
+  ALLOWED_OP_GENERATE_CODE = 5;
+}
+
+// Artifact file reference
+message ArtifactFile {
+  string path = 1;
+  string mime_type = 2;
+  int64 size_bytes = 3;
+}
+
+// Artifact constraints
+message ArtifactConstraints {
+  bool no_write = 1;
+  PiiStatus pii = 2;
+  repeated AllowedOp allowed_ops = 3;
+}
+
+// Artifact envelope - required for ingestion
+message ArtifactEnvelope {
+  string artifact_id = 1;
+  ArtifactType artifact_type = 2;
+  string schema_version = 3;
+  ArtifactSource source = 4;
+  google.protobuf.Timestamp created_at = 5;
+  string content_sha256 = 6;
+  ArtifactIntent intent = 7;
+  ArtifactTarget target = 8;
+  ArtifactConstraints constraints = 9;
+  repeated ArtifactFile files = 10;
+}
+
+// Full artifact with processing status
+message Artifact {
+  ArtifactEnvelope envelope = 1;
+  ArtifactStatus status = 2;
+  string routed_to = 3;
+  string run_id = 4;
+  google.protobuf.Timestamp processed_at = 5;
+  google.protobuf.Struct metadata = 6;
+}
+
+// Ingest artifact request
+message IngestArtifactRequest {
+  ArtifactEnvelope envelope = 1;
+  bytes content = 2;  // Optional: inline content for small artifacts
+}
+
+// Ingest artifact response
+message IngestArtifactResponse {
+  string artifact_id = 1;
+  ArtifactStatus status = 2;
+  string routed_to = 3;
+  string run_id = 4;
+  repeated string validation_errors = 5;
+}
+
+// Get artifact request
+message GetArtifactRequest {
+  string artifact_id = 1;
+  bool include_content = 2;
+}
+
+// List artifacts request
+message ListArtifactsRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+  ArtifactType artifact_type = 3;
+  ArtifactIntent intent = 4;
+  ArtifactTarget target = 5;
+  ArtifactStatus status = 6;
+}
+
+// List artifacts response
+message ListArtifactsResponse {
+  repeated Artifact artifacts = 1;
+  string next_page_token = 2;
+  int32 total_count = 3;
+}
+
+// Watch artifact request
+message WatchArtifactRequest {
+  string artifact_id = 1;
+}
+
+// Artifact event types
+enum ArtifactEventType {
+  ARTIFACT_EVENT_TYPE_UNSPECIFIED = 0;
+  ARTIFACT_EVENT_TYPE_RECEIVED = 1;
+  ARTIFACT_EVENT_TYPE_ROUTED = 2;
+  ARTIFACT_EVENT_TYPE_PROCESSING = 3;
+  ARTIFACT_EVENT_TYPE_COMPLETED = 4;
+  ARTIFACT_EVENT_TYPE_FAILED = 5;
+}
+
+// Artifact event for streaming
+message ArtifactEvent {
+  ArtifactEventType event_type = 1;
+  string artifact_id = 2;
+  google.protobuf.Timestamp timestamp = 3;
+  ArtifactStatus status = 4;
+  string message = 5;
+  google.protobuf.Struct details = 6;
+}

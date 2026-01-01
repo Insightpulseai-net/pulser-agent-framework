@@ -1,0 +1,125 @@
+# GENERATED FILE - DO NOT EDIT MANUALLY
+# Source: specs/openapi/components/responses.yaml
+# Generated: 2026-01-01T00:00:00Z
+# Regenerate: make generate-spec
+components:
+  responses:
+    BadRequest:
+      description: Bad request - invalid input
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: 'bad_request'
+              message:
+                type: string
+                example: 'Invalid request parameters'
+              details:
+                type: object
+                additionalProperties: true
+
+    Unauthorized:
+      description: Unauthorized - authentication required
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: 'unauthorized'
+              message:
+                type: string
+                example: 'Authentication required'
+
+    Forbidden:
+      description: Forbidden - insufficient permissions
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: 'forbidden'
+              message:
+                type: string
+                example: 'Insufficient permissions'
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: 'not_found'
+              message:
+                type: string
+                example: 'Resource not found'
+              resource_type:
+                type: string
+              resource_id:
+                type: string
+
+    Conflict:
+      description: Conflict - resource already exists
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: 'conflict'
+              message:
+                type: string
+                example: 'Resource already exists'
+
+    RateLimited:
+      description: Rate limit exceeded
+      headers:
+        X-RateLimit-Limit:
+          schema:
+            type: integer
+        X-RateLimit-Remaining:
+          schema:
+            type: integer
+        X-RateLimit-Reset:
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: 'rate_limited'
+              message:
+                type: string
+                example: 'Rate limit exceeded'
+              retry_after:
+                type: integer
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: 'internal_error'
+              message:
+                type: string
+                example: 'An internal error occurred'
+              request_id:
+                type: string
+                description: Request ID for debugging

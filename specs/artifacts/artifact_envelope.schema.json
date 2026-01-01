@@ -1,0 +1,224 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://insightpulseai.net/schemas/v1/artifact-envelope.schema.json",
+  "title": "Artifact Envelope v1",
+  "description": "Minimum required metadata for deterministic artifact routing. If envelope is missing or invalid, agent returns BLOCKED.",
+  "type": "object",
+  "required": [
+    "artifact_id",
+    "artifact_type",
+    "schema_version",
+    "source",
+    "created_at",
+    "content_sha256",
+    "intent",
+    "target",
+    "files"
+  ],
+  "properties": {
+    "artifact_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier for the artifact (UUID v4)"
+    },
+    "artifact_type": {
+      "$ref": "#/$defs/ArtifactType",
+      "description": "Type classification for routing decisions"
+    },
+    "schema_version": {
+      "type": "string",
+      "pattern": "^v\\d+$",
+      "default": "v1",
+      "description": "Envelope schema version"
+    },
+    "source": {
+      "$ref": "#/$defs/ArtifactSource",
+      "description": "Origin system of the artifact"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 creation timestamp"
+    },
+    "content_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "SHA-256 hash for idempotent ingestion (if hash exists, no re-ingest)"
+    },
+    "intent": {
+      "$ref": "#/$defs/ArtifactIntent",
+      "description": "Processing intent for pipeline selection"
+    },
+    "target": {
+      "$ref": "#/$defs/ArtifactTarget",
+      "description": "Target system for processing"
+    },
+    "constraints": {
+      "$ref": "#/$defs/ArtifactConstraints",
+      "description": "Processing constraints and permissions"
+    },
+    "files": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/ArtifactFile"
+      },
+      "description": "List of files in the artifact"
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Optional additional metadata"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "ArtifactType": {
+      "type": "string",
+      "enum": [
+        "doc",
+        "pdf",
+        "csv",
+        "sql",
+        "openapi",
+        "json_schema",
+        "code",
+        "logs",
+        "dataset",
+        "protobuf",
+        "asyncapi",
+        "graphql",
+        "markdown",
+        "notebook"
+      ],
+      "description": "Supported artifact types"
+    },
+    "ArtifactSource": {
+      "type": "string",
+      "enum": [
+        "odoo",
+        "supabase",
+        "gdrive",
+        "manual",
+        "agent",
+        "github",
+        "s3"
+      ],
+      "description": "Artifact origin systems"
+    },
+    "ArtifactIntent": {
+      "type": "string",
+      "enum": [
+        "train",
+        "eval",
+        "etl",
+        "docs2code",
+        "debug",
+        "release",
+        "archive",
+        "index"
+      ],
+      "description": "Processing intents for routing"
+    },
+    "ArtifactTarget": {
+      "type": "string",
+      "enum": [
+        "ml",
+        "odoo",
+        "superset",
+        "workbench",
+        "knowledge",
+        "storage"
+      ],
+      "description": "Target processing systems"
+    },
+    "ArtifactConstraints": {
+      "type": "object",
+      "properties": {
+        "no_write": {
+          "type": "boolean",
+          "default": false,
+          "description": "Read-only artifact flag"
+        },
+        "pii": {
+          "type": "string",
+          "enum": ["unknown", "none", "present"],
+          "default": "unknown",
+          "description": "PII classification status"
+        },
+        "allowed_ops": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "parse",
+              "index",
+              "train",
+              "eval",
+              "generate_code",
+              "transform",
+              "validate"
+            ]
+          },
+          "description": "Explicitly allowed operations"
+        },
+        "max_retention_days": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum retention period in days"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ArtifactFile": {
+      "type": "object",
+      "required": ["path", "mime"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Relative file path"
+        },
+        "mime": {
+          "type": "string",
+          "pattern": "^[a-z]+/[a-z0-9.+-]+$",
+          "description": "MIME type"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "File size in bytes"
+        },
+        "checksum": {
+          "type": "string",
+          "description": "Optional per-file checksum"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "examples": [
+    {
+      "artifact_id": "550e8400-e29b-41d4-a716-446655440000",
+      "artifact_type": "openapi",
+      "schema_version": "v1",
+      "source": "github",
+      "created_at": "2026-01-01T00:00:00Z",
+      "content_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "intent": "docs2code",
+      "target": "workbench",
+      "constraints": {
+        "no_write": false,
+        "pii": "none",
+        "allowed_ops": ["parse", "generate_code", "validate"]
+      },
+      "files": [
+        {
+          "path": "specs/openapi/openapi.yaml",
+          "mime": "application/yaml",
+          "size_bytes": 12345
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,147 @@
+// GENERATED FILE - DO NOT EDIT MANUALLY
+// Source: InsightPulse AI Platform Protobuf Definitions
+// Generated: 2026-01-01T00:00:00Z
+// Regenerate: make generate-proto
+
+syntax = "proto3";
+
+package ipai.codegen.v1;
+
+option go_package = "github.com/insightpulseai/ipai-proto/codegen/v1;codegenv1";
+option java_package = "net.insightpulseai.proto.codegen.v1";
+option java_multiple_files = true;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+// CodegenService provides code generation operations
+service CodegenService {
+  // Generate code from specification
+  rpc Generate(GenerateRequest) returns (GenerateResponse);
+
+  // Validate a specification
+  rpc Validate(ValidateRequest) returns (ValidateResponse);
+
+  // Stream code generation progress
+  rpc GenerateStream(GenerateRequest) returns (stream GenerateProgress);
+
+  // Check for breaking changes
+  rpc CheckBreaking(CheckBreakingRequest) returns (CheckBreakingResponse);
+}
+
+// Specification type
+enum SpecType {
+  SPEC_TYPE_UNSPECIFIED = 0;
+  SPEC_TYPE_OPENAPI = 1;
+  SPEC_TYPE_ASYNCAPI = 2;
+  SPEC_TYPE_PROTOBUF = 3;
+  SPEC_TYPE_GRAPHQL = 4;
+  SPEC_TYPE_JSON_SCHEMA = 5;
+}
+
+// Target language
+enum TargetLanguage {
+  TARGET_LANGUAGE_UNSPECIFIED = 0;
+  TARGET_LANGUAGE_PYTHON = 1;
+  TARGET_LANGUAGE_TYPESCRIPT = 2;
+  TARGET_LANGUAGE_GO = 3;
+  TARGET_LANGUAGE_JAVA = 4;
+  TARGET_LANGUAGE_RUST = 5;
+  TARGET_LANGUAGE_SWIFT = 6;
+  TARGET_LANGUAGE_KOTLIN = 7;
+}
+
+// Generation target type
+enum GenerationTarget {
+  GENERATION_TARGET_UNSPECIFIED = 0;
+  GENERATION_TARGET_CLIENT = 1;
+  GENERATION_TARGET_SERVER = 2;
+  GENERATION_TARGET_TYPES = 3;
+  GENERATION_TARGET_MODELS = 4;
+}
+
+// Generate request
+message GenerateRequest {
+  SpecType spec_type = 1;
+  bytes spec_content = 2;
+  TargetLanguage target_language = 3;
+  GenerationTarget generation_target = 4;
+  google.protobuf.Struct options = 5;
+  string template_dir = 6;
+}
+
+// Generated file
+message GeneratedFile {
+  string path = 1;
+  bytes content = 2;
+  string language = 3;
+  bool is_test = 4;
+}
+
+// Generate response
+message GenerateResponse {
+  string run_id = 1;
+  repeated GeneratedFile files = 2;
+  repeated string warnings = 3;
+  int64 duration_ms = 4;
+}
+
+// Generate progress for streaming
+message GenerateProgress {
+  string run_id = 1;
+  int32 progress_percent = 2;
+  string current_file = 3;
+  string message = 4;
+  google.protobuf.Timestamp timestamp = 5;
+}
+
+// Validate request
+message ValidateRequest {
+  SpecType spec_type = 1;
+  bytes spec_content = 2;
+  bool strict = 3;
+}
+
+// Validation error
+message ValidationError {
+  string path = 1;
+  string message = 2;
+  string rule = 3;
+  int32 line = 4;
+  int32 column = 5;
+}
+
+// Validation warning
+message ValidationWarning {
+  string path = 1;
+  string message = 2;
+  string suggestion = 3;
+}
+
+// Validate response
+message ValidateResponse {
+  bool valid = 1;
+  repeated ValidationError errors = 2;
+  repeated ValidationWarning warnings = 3;
+}
+
+// Check breaking request
+message CheckBreakingRequest {
+  SpecType spec_type = 1;
+  bytes current_spec = 2;
+  bytes previous_spec = 3;
+}
+
+// Breaking change
+message BreakingChange {
+  string path = 1;
+  string change_type = 2;
+  string description = 3;
+  string severity = 4;  // critical, major, minor
+}
+
+// Check breaking response
+message CheckBreakingResponse {
+  bool has_breaking_changes = 1;
+  repeated BreakingChange changes = 2;
+}

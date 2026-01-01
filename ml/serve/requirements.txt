@@ -1,0 +1,11 @@
+# ML Serving Requirements
+# Install: pip install -r ml/serve/requirements.txt
+
+torch>=2.0.0
+transformers>=4.35.0
+peft>=0.6.0
+accelerate>=0.24.0
+safetensors>=0.4.0
+huggingface-hub>=0.19.0
+pyyaml>=6.0
+tqdm>=4.66.0

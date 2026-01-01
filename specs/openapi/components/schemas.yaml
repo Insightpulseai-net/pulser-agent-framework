@@ -1,0 +1,415 @@
+# GENERATED FILE - DO NOT EDIT MANUALLY
+# Source: specs/openapi/components/schemas.yaml
+# Generated: 2026-01-01T00:00:00Z
+# Regenerate: make generate-spec
+components:
+  schemas:
+    # Document Models
+    Document:
+      type: object
+      required: [id, name, status, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        mime_type:
+          type: string
+        size_bytes:
+          type: integer
+          format: int64
+        status:
+          $ref: '#/components/schemas/DocumentStatus'
+        metadata:
+          type: object
+          additionalProperties: true
+        content_hash:
+          type: string
+          description: SHA-256 hash of content
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    DocumentStatus:
+      type: string
+      enum: [pending, processing, processed, failed, archived]
+
+    DocumentList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Document'
+        next_page_token:
+          type: string
+        total_count:
+          type: integer
+
+    # Artifact Models
+    ArtifactType:
+      type: string
+      enum:
+        - doc
+        - pdf
+        - csv
+        - sql
+        - openapi
+        - json_schema
+        - code
+        - logs
+        - dataset
+        - protobuf
+        - asyncapi
+        - graphql
+
+    ArtifactIntent:
+      type: string
+      enum:
+        - train
+        - eval
+        - etl
+        - docs2code
+        - debug
+        - release
+
+    ArtifactTarget:
+      type: string
+      enum:
+        - ml
+        - odoo
+        - superset
+        - workbench
+
+    ArtifactEnvelope:
+      type: object
+      required: [artifact_id, artifact_type, schema_version, source, created_at, content_sha256, intent, target, files]
+      properties:
+        artifact_id:
+          type: string
+          format: uuid
+        artifact_type:
+          $ref: '#/components/schemas/ArtifactType'
+        schema_version:
+          type: string
+          pattern: '^v\d+$'
+          example: 'v1'
+        source:
+          type: string
+          enum: [odoo, supabase, gdrive, manual, agent]
+        created_at:
+          type: string
+          format: date-time
+        content_sha256:
+          type: string
+          pattern: '^[a-f0-9]{64}$'
+        intent:
+          $ref: '#/components/schemas/ArtifactIntent'
+        target:
+          $ref: '#/components/schemas/ArtifactTarget'
+        constraints:
+          $ref: '#/components/schemas/ArtifactConstraints'
+        files:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ArtifactFile'
+
+    ArtifactConstraints:
+      type: object
+      properties:
+        no_write:
+          type: boolean
+          default: false
+        pii:
+          type: string
+          enum: [unknown, none, present]
+          default: unknown
+        allowed_ops:
+          type: array
+          items:
+            type: string
+            enum: [parse, index, train, eval, generate_code]
+
+    ArtifactFile:
+      type: object
+      required: [path, mime]
+      properties:
+        path:
+          type: string
+        mime:
+          type: string
+
+    Artifact:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/ArtifactEnvelope'
+        - type: object
+          properties:
+            status:
+              type: string
+              enum: [pending, routed, processing, completed, failed]
+            routed_to:
+              type: string
+            run_id:
+              type: string
+              format: uuid
+
+    ArtifactList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Artifact'
+        next_page_token:
+          type: string
+        total_count:
+          type: integer
+
+    ArtifactIngestResponse:
+      type: object
+      properties:
+        artifact_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [accepted, routed, blocked]
+        routed_to:
+          type: string
+          description: Pipeline or target the artifact was routed to
+        run_id:
+          type: string
+          format: uuid
+          description: Run ID if processing was started
+
+    EnvelopeValidationError:
+      type: object
+      properties:
+        error:
+          type: string
+          enum: [invalid_envelope]
+        missing_fields:
+          type: array
+          items:
+            type: string
+        invalid_fields:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              reason:
+                type: string
+
+    # Codegen Models
+    CodegenRequest:
+      type: object
+      required: [spec_type, spec_content, target_language]
+      properties:
+        spec_type:
+          type: string
+          enum: [openapi, asyncapi, protobuf, graphql, json_schema]
+        spec_content:
+          type: string
+          description: Base64-encoded specification content
+        target_language:
+          type: string
+          enum: [python, typescript, go, java, rust, swift, kotlin]
+        options:
+          type: object
+          additionalProperties: true
+
+    CodegenResponse:
+      type: object
+      properties:
+        files:
+          type: array
+          items:
+            type: object
+            properties:
+              path:
+                type: string
+              content:
+                type: string
+              language:
+                type: string
+        warnings:
+          type: array
+          items:
+            type: string
+
+    ValidateSpecRequest:
+      type: object
+      required: [spec_type, spec_content]
+      properties:
+        spec_type:
+          type: string
+          enum: [openapi, asyncapi, protobuf, graphql, json_schema]
+        spec_content:
+          type: string
+        strict:
+          type: boolean
+          default: true
+
+    ValidationResult:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationError'
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationWarning'
+
+    ValidationError:
+      type: object
+      properties:
+        path:
+          type: string
+        message:
+          type: string
+        rule:
+          type: string
+
+    ValidationWarning:
+      type: object
+      properties:
+        path:
+          type: string
+        message:
+          type: string
+        suggestion:
+          type: string
+
+    # Agent Models
+    Agent:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+          enum: [active, inactive, deprecated]
+
+    AgentList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Agent'
+
+    AgentRunRequest:
+      type: object
+      required: [input]
+      properties:
+        input:
+          type: object
+          additionalProperties: true
+        context:
+          type: object
+          additionalProperties: true
+        options:
+          type: object
+          properties:
+            timeout_seconds:
+              type: integer
+              default: 300
+            stream:
+              type: boolean
+              default: false
+
+    AgentRunResponse:
+      type: object
+      properties:
+        run_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [completed, failed, timeout]
+        output:
+          type: object
+          additionalProperties: true
+        logs:
+          type: array
+          items:
+            type: string
+        duration_ms:
+          type: integer
+
+    # Knowledge Models
+    KnowledgeSearchRequest:
+      type: object
+      required: [query]
+      properties:
+        query:
+          type: string
+          minLength: 1
+        filters:
+          type: object
+          additionalProperties: true
+        limit:
+          type: integer
+          default: 10
+          maximum: 100
+        include_content:
+          type: boolean
+          default: true
+
+    KnowledgeSearchResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              score:
+                type: number
+                format: float
+              content:
+                type: string
+              metadata:
+                type: object
+                additionalProperties: true
+        total_count:
+          type: integer
+
+    # Common Error Models
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+        request_id:
+          type: string

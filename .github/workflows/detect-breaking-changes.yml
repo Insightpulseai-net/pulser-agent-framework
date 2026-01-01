@@ -1,0 +1,210 @@
+# GENERATED FILE - DO NOT EDIT MANUALLY
+# Source: docs-to-code-pipeline
+# Generated: 2026-01-01T00:00:00Z
+# Regenerate: Managed by repository template
+name: Breaking Change Detection
+
+on:
+  pull_request:
+    paths:
+      - 'specs/**'
+
+concurrency:
+  group: breaking-changes-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  check-openapi-breaking:
+    name: Check OpenAPI Breaking Changes
+    runs-on: ubuntu-latest
+    if: ${{ hashFiles('specs/openapi/**') != '' }}
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Install oasdiff
+        run: go install github.com/tufin/oasdiff@latest
+
+      - name: Check for Breaking Changes
+        id: breaking
+        continue-on-error: true
+        run: |
+          # Get the base branch spec
+          git show origin/${{ github.base_ref }}:specs/openapi/openapi.yaml > /tmp/base-spec.yaml 2>/dev/null || echo "" > /tmp/base-spec.yaml
+
+          # Only check if base spec exists
+          if [ -s /tmp/base-spec.yaml ]; then
+            echo "Checking for breaking changes..."
+            oasdiff breaking /tmp/base-spec.yaml specs/openapi/openapi.yaml \
+              --format json > breaking-changes.json 2>&1 || true
+
+            if [ -s breaking-changes.json ] && [ "$(cat breaking-changes.json)" != "null" ] && [ "$(cat breaking-changes.json)" != "[]" ]; then
+              echo "has_breaking=true" >> $GITHUB_OUTPUT
+              echo "Breaking changes detected:"
+              cat breaking-changes.json
+            else
+              echo "has_breaking=false" >> $GITHUB_OUTPUT
+              echo "No breaking changes detected"
+            fi
+          else
+            echo "No base spec found (new file?), skipping breaking change check"
+            echo "has_breaking=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Comment on PR (Breaking Changes)
+        if: steps.breaking.outputs.has_breaking == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let changes = [];
+            try {
+              changes = JSON.parse(fs.readFileSync('breaking-changes.json', 'utf8'));
+            } catch (e) {
+              changes = [];
+            }
+
+            const body = `## ⚠️ Breaking Changes Detected in OpenAPI Spec
+
+            The following breaking changes were found in this PR:
+
+            \`\`\`json
+            ${JSON.stringify(changes, null, 2)}
+            \`\`\`
+
+            ### Resolution Options:
+            1. **Remove the breaking changes** if unintentional
+            2. **Add the \`breaking-change-approved\` label** if these changes are intentional and approved
+            3. **Update the API version** (e.g., /v1 → /v2) for major changes
+
+            ---
+            *This check helps ensure API compatibility for consumers.*
+            `;
+
+            // Find existing comment
+            const comments = await github.rest.issues.listComments({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo
+            });
+
+            const existingComment = comments.data.find(c =>
+              c.user.type === 'Bot' && c.body.includes('Breaking Changes Detected')
+            );
+
+            if (existingComment) {
+              await github.rest.issues.updateComment({
+                comment_id: existingComment.id,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: body
+              });
+            }
+
+      - name: Fail if breaking (without approval)
+        if: steps.breaking.outputs.has_breaking == 'true'
+        run: |
+          # Check if PR has breaking-change-approved label
+          LABELS="${{ join(github.event.pull_request.labels.*.name, ',') }}"
+          if [[ "$LABELS" == *"breaking-change-approved"* ]]; then
+            echo "Breaking changes approved via label"
+            exit 0
+          else
+            echo "Breaking changes detected without approval label"
+            exit 1
+          fi
+
+  check-protobuf-breaking:
+    name: Check Protobuf Breaking Changes
+    runs-on: ubuntu-latest
+    if: ${{ hashFiles('specs/protobuf/**') != '' }}
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Buf
+        uses: bufbuild/buf-setup-action@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check Protobuf Breaking Changes
+        id: proto-breaking
+        continue-on-error: true
+        run: |
+          if [ -d "specs/protobuf" ]; then
+            cd specs/protobuf
+            buf breaking --against '../../.git#branch=${{ github.base_ref }},subdir=specs/protobuf' \
+              --config '{"version":"v2","breaking":{"use":["FILE"]}}' 2>&1 || echo "proto_breaking=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Comment on PR (Protobuf Breaking)
+        if: steps.proto-breaking.outputs.proto_breaking == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = `## ⚠️ Protobuf Breaking Changes Detected
+
+            Breaking changes were detected in the Protobuf definitions.
+
+            ### Common Breaking Changes:
+            - Removing or renaming fields
+            - Changing field types
+            - Changing field numbers
+            - Removing services or methods
+
+            Please review and either revert the changes or add the \`breaking-change-approved\` label.
+            `;
+
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
+  summary:
+    name: Breaking Change Summary
+    runs-on: ubuntu-latest
+    needs: [check-openapi-breaking, check-protobuf-breaking]
+    if: always()
+    steps:
+      - name: Generate Summary
+        run: |
+          echo "## Breaking Change Detection Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.check-openapi-breaking.result }}" == "success" ]; then
+            echo "✅ OpenAPI: No breaking changes" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.check-openapi-breaking.result }}" == "skipped" ]; then
+            echo "⏭️ OpenAPI: Skipped (no changes)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ OpenAPI: Breaking changes detected" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.check-protobuf-breaking.result }}" == "success" ]; then
+            echo "✅ Protobuf: No breaking changes" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.check-protobuf-breaking.result }}" == "skipped" ]; then
+            echo "⏭️ Protobuf: Skipped (no changes)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ Protobuf: Breaking changes detected" >> $GITHUB_STEP_SUMMARY
+          fi

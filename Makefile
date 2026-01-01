@@ -425,3 +425,180 @@ deploy-staging: ## Deploy to staging environment
 	@$(MAKE) infra-bootstrap ENV=staging
 	@$(MAKE) stack-up
 	@echo "$(GREEN)✅ Staging deployment complete$(RESET)"
+
+# =============================================================================
+# DOCS-TO-CODE PIPELINE
+# =============================================================================
+
+# Specification paths
+SPEC_FILE := specs/openapi/openapi.yaml
+CONFIG_DIR := config
+GENERATED_DIR := generated
+
+.PHONY: spec-validate
+spec-validate: ## Validate all specifications (OpenAPI, AsyncAPI, Protobuf)
+	@echo "$(CYAN)🔍 Validating specifications...$(RESET)"
+	@bash scripts/validate-specs.sh
+	@echo "$(GREEN)✅ Specification validation complete$(RESET)"
+
+.PHONY: spec-breaking
+spec-breaking: ## Check for breaking changes in specs
+	@echo "$(CYAN)🔍 Checking for breaking changes...$(RESET)"
+	@bash scripts/check-breaking.sh $(BASE_BRANCH)
+	@echo "$(GREEN)✅ Breaking change check complete$(RESET)"
+
+.PHONY: generate-all
+generate-all: generate-python generate-typescript generate-go generate-proto ## Generate all SDK clients
+	@echo ""
+	@echo "$(GREEN)✅ ALL CODE GENERATION COMPLETE$(RESET)"
+
+.PHONY: generate-python
+generate-python: ## Generate Python SDK client
+	@echo "$(CYAN)🐍 Generating Python client...$(RESET)"
+	@mkdir -p $(GENERATED_DIR)/clients/python
+	@if command -v openapi-generator-cli &> /dev/null; then \
+		openapi-generator-cli generate \
+			-i $(SPEC_FILE) \
+			-g python \
+			-o $(GENERATED_DIR)/clients/python \
+			-c $(CONFIG_DIR)/openapi-generator-python.yaml \
+			--skip-validate-spec; \
+	else \
+		echo "$(YELLOW)openapi-generator-cli not found, install with: npm install -g @openapitools/openapi-generator-cli$(RESET)"; \
+	fi
+	@echo "$(GREEN)✅ Python client generated$(RESET)"
+
+.PHONY: generate-typescript
+generate-typescript: ## Generate TypeScript SDK client
+	@echo "$(CYAN)📘 Generating TypeScript client...$(RESET)"
+	@mkdir -p $(GENERATED_DIR)/clients/typescript
+	@if command -v openapi-generator-cli &> /dev/null; then \
+		openapi-generator-cli generate \
+			-i $(SPEC_FILE) \
+			-g typescript-fetch \
+			-o $(GENERATED_DIR)/clients/typescript \
+			-c $(CONFIG_DIR)/openapi-generator-typescript.yaml \
+			--skip-validate-spec; \
+	else \
+		echo "$(YELLOW)openapi-generator-cli not found$(RESET)"; \
+	fi
+	@echo "$(GREEN)✅ TypeScript client generated$(RESET)"
+
+.PHONY: generate-go
+generate-go: ## Generate Go SDK client
+	@echo "$(CYAN)🔵 Generating Go client...$(RESET)"
+	@mkdir -p $(GENERATED_DIR)/clients/go
+	@if command -v openapi-generator-cli &> /dev/null; then \
+		openapi-generator-cli generate \
+			-i $(SPEC_FILE) \
+			-g go \
+			-o $(GENERATED_DIR)/clients/go \
+			-c $(CONFIG_DIR)/openapi-generator-go.yaml \
+			--skip-validate-spec; \
+	else \
+		echo "$(YELLOW)openapi-generator-cli not found$(RESET)"; \
+	fi
+	@echo "$(GREEN)✅ Go client generated$(RESET)"
+
+.PHONY: generate-proto
+generate-proto: ## Generate code from Protobuf definitions
+	@echo "$(CYAN)📦 Generating from Protobuf...$(RESET)"
+	@if command -v buf &> /dev/null && [ -d "specs/protobuf" ]; then \
+		buf generate specs/protobuf --template $(CONFIG_DIR)/buf.gen.yaml; \
+		echo "$(GREEN)✅ Protobuf code generated$(RESET)"; \
+	else \
+		echo "$(YELLOW)buf not found or no protobuf specs$(RESET)"; \
+	fi
+
+.PHONY: docs2code-up
+docs2code-up: ## Start docs-to-code development services
+	@echo "$(CYAN)🚀 Starting docs-to-code services...$(RESET)"
+	@$(DOCKER_COMPOSE) -f $(INFRA_DIR)/docker-compose.docs2code.yml --profile docs up -d
+	@echo "$(GREEN)✅ Services started$(RESET)"
+	@echo "  Swagger UI: http://localhost:8080"
+	@echo "  ReDoc: http://localhost:8081"
+
+.PHONY: docs2code-down
+docs2code-down: ## Stop docs-to-code development services
+	@$(DOCKER_COMPOSE) -f $(INFRA_DIR)/docker-compose.docs2code.yml down
+	@echo "$(GREEN)✅ Services stopped$(RESET)"
+
+.PHONY: mock-server
+mock-server: ## Start Prism mock server
+	@echo "$(CYAN)🎭 Starting mock server...$(RESET)"
+	@$(DOCKER_COMPOSE) -f $(INFRA_DIR)/docker-compose.docs2code.yml --profile mock up -d prism-mock
+	@echo "$(GREEN)✅ Mock server running at http://localhost:4010$(RESET)"
+
+# =============================================================================
+# ML MODEL FACTORY
+# =============================================================================
+
+ML_DIR := ml
+RUNS_DIR := runs
+EVALS_DIR := evals
+
+.PHONY: ml-deps
+ml-deps: venv ## Install ML training dependencies
+	@echo "$(CYAN)📦 Installing ML dependencies...$(RESET)"
+	@$(PIP) install -r $(ML_DIR)/datasets/requirements.txt
+	@$(PIP) install -r $(ML_DIR)/train/requirements.txt
+	@$(PIP) install -r $(ML_DIR)/eval/requirements.txt
+	@echo "$(GREEN)✅ ML dependencies installed$(RESET)"
+
+.PHONY: ml-dataset
+ml-dataset: ## Build training dataset
+	@echo "$(CYAN)📊 Building training dataset...$(RESET)"
+	@$(PYTHON) pipelines/model/10_make_sft_jsonl.py --version $(VERSION) --output data/train.jsonl
+	@echo "$(GREEN)✅ Dataset built$(RESET)"
+
+.PHONY: ml-train
+ml-train: ## Run model training (requires GPU)
+	@echo "$(CYAN)🧠 Starting model training...$(RESET)"
+	@$(PYTHON) $(ML_DIR)/train/run.py \
+		--config $(ML_DIR)/train/configs/$(CONFIG) \
+		--run-id $(RUN_ID) \
+		--output-dir $(RUNS_DIR)/$(RUN_ID)
+	@echo "$(GREEN)✅ Training complete$(RESET)"
+
+.PHONY: ml-eval
+ml-eval: ## Evaluate trained model
+	@echo "$(CYAN)📈 Running evaluation...$(RESET)"
+	@$(PYTHON) $(ML_DIR)/eval/harness/run.py \
+		--run-id $(RUN_ID) \
+		--model-path $(RUNS_DIR)/$(RUN_ID) \
+		--output-dir $(EVALS_DIR)/$(RUN_ID)
+	@echo "$(GREEN)✅ Evaluation complete$(RESET)"
+
+.PHONY: ml-export
+ml-export: ## Export model for release
+	@echo "$(CYAN)📦 Exporting model...$(RESET)"
+	@$(PYTHON) $(ML_DIR)/serve/export.py \
+		--run-id $(RUN_ID) \
+		--tag $(TAG) \
+		--output-dir release/$(TAG)
+	@echo "$(GREEN)✅ Model exported$(RESET)"
+
+.PHONY: ml-smoke
+ml-smoke: ## Run smoke test on model release
+	@echo "$(CYAN)🔥 Running smoke test...$(RESET)"
+	@$(PYTHON) $(ML_DIR)/eval/harness/smoke.py \
+		--tag $(TAG) \
+		--model-path release/$(TAG)
+	@echo "$(GREEN)✅ Smoke test passed$(RESET)"
+
+# =============================================================================
+# ARTIFACT INGESTION
+# =============================================================================
+
+.PHONY: ingest
+ingest: ## Ingest artifact with envelope validation
+	@echo "$(CYAN)📥 Ingesting artifact...$(RESET)"
+	@if [ -z "$(ENVELOPE)" ]; then \
+		echo "$(RED)Error: ENVELOPE file required$(RESET)"; \
+		echo "Usage: make ingest ENVELOPE=path/to/envelope.json"; \
+		exit 1; \
+	fi
+	@$(PYTHON) -c "import json; e=json.load(open('$(ENVELOPE)')); \
+		required=['artifact_id','artifact_type','schema_version','source','created_at','content_sha256','intent','target','files']; \
+		missing=[f for f in required if f not in e]; \
+		print('BLOCKED: Missing fields:', missing) if missing else print('Envelope valid, routing to:', e.get('target'))"

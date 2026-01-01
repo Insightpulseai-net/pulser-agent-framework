@@ -1,0 +1,25 @@
+# GENERATED FILE - DO NOT EDIT MANUALLY
+# Source: docs-to-code-pipeline
+# Generated: 2026-01-01T00:00:00Z
+# Regenerate: Managed by repository template
+version: v2
+modules:
+  - path: specs/protobuf
+    name: buf.build/insightpulseai/ipai-proto
+
+lint:
+  use:
+    - DEFAULT
+  except:
+    - PACKAGE_VERSION_SUFFIX
+    - RPC_REQUEST_STANDARD_NAME
+    - RPC_RESPONSE_STANDARD_NAME
+  rpc_allow_google_protobuf_empty_requests: true
+  rpc_allow_google_protobuf_empty_responses: true
+  enum_zero_value_suffix: _UNSPECIFIED
+  service_suffix: Service
+
+breaking:
+  use:
+    - FILE
+  ignore_unstable_packages: true

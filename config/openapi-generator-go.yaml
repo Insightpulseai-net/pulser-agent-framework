@@ -1,0 +1,20 @@
+# GENERATED FILE - DO NOT EDIT MANUALLY
+# Source: docs-to-code-pipeline
+# Generated: 2026-01-01T00:00:00Z
+# Regenerate: make generate-go
+generatorName: go
+outputDir: generated/clients/go
+additionalProperties:
+  packageName: ipaiclient
+  packageVersion: 0.1.0
+  isGoSubmodule: true
+  withGoMod: true
+  generateInterfaces: true
+  structPrefix: true
+
+# Files to preserve during regeneration
+ignoreFileOverride: |
+  .gitignore
+  README.md
+  go.sum
+  CHANGELOG.md

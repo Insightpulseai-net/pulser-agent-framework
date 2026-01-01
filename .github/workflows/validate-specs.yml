@@ -1,0 +1,176 @@
+# GENERATED FILE - DO NOT EDIT MANUALLY
+# Source: docs-to-code-pipeline
+# Generated: 2026-01-01T00:00:00Z
+# Regenerate: Managed by repository template
+name: Validate Specifications
+
+on:
+  pull_request:
+    paths:
+      - 'specs/**'
+      - 'openapi.yaml'
+  push:
+    branches: [main]
+    paths:
+      - 'specs/**'
+  workflow_dispatch:
+
+concurrency:
+  group: validate-specs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-openapi:
+    name: Lint OpenAPI Spec
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Redocly CLI
+        run: npm install -g @redocly/cli
+
+      - name: Lint OpenAPI Spec
+        run: |
+          if [ -f "specs/openapi/openapi.yaml" ]; then
+            redocly lint specs/openapi/openapi.yaml --format github-actions
+          else
+            echo "No OpenAPI spec found, skipping"
+          fi
+
+      - name: Validate OpenAPI Schema
+        run: |
+          npm install -g @apidevtools/swagger-cli
+          if [ -f "specs/openapi/openapi.yaml" ]; then
+            swagger-cli validate specs/openapi/openapi.yaml
+          fi
+
+  lint-asyncapi:
+    name: Lint AsyncAPI Spec
+    runs-on: ubuntu-latest
+    if: ${{ hashFiles('specs/asyncapi/**') != '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install AsyncAPI CLI
+        run: npm install -g @asyncapi/cli
+
+      - name: Validate AsyncAPI
+        run: |
+          for file in specs/asyncapi/*.yaml specs/asyncapi/*.yml; do
+            if [ -f "$file" ]; then
+              echo "Validating $file"
+              asyncapi validate "$file"
+            fi
+          done
+
+  lint-protobuf:
+    name: Lint Protobuf
+    runs-on: ubuntu-latest
+    if: ${{ hashFiles('specs/protobuf/**') != '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Buf
+        uses: bufbuild/buf-setup-action@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Lint Protobuf
+        run: |
+          if [ -d "specs/protobuf" ]; then
+            cd specs/protobuf
+            if [ -f "buf.yaml" ]; then
+              buf lint
+            else
+              echo "No buf.yaml found, using default lint"
+              buf lint --config '{"version":"v2","lint":{"use":["DEFAULT"]}}'
+            fi
+          fi
+
+  validate-json-schemas:
+    name: Validate JSON Schemas
+    runs-on: ubuntu-latest
+    if: ${{ hashFiles('specs/json-schema/**') != '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install ajv-cli
+        run: npm install -g ajv-cli ajv-formats
+
+      - name: Validate JSON Schemas
+        run: |
+          for schema in specs/json-schema/*.schema.json; do
+            if [ -f "$schema" ]; then
+              echo "Validating schema: $schema"
+              ajv compile -s "$schema" --spec=draft2020 -c ajv-formats
+            fi
+          done
+
+      - name: Validate Artifact Envelope Schema
+        run: |
+          if [ -f "specs/artifacts/artifact_envelope.schema.json" ]; then
+            echo "Validating artifact envelope schema"
+            ajv compile -s "specs/artifacts/artifact_envelope.schema.json" --spec=draft2020 -c ajv-formats
+          fi
+
+  summary:
+    name: Validation Summary
+    runs-on: ubuntu-latest
+    needs: [lint-openapi, lint-asyncapi, lint-protobuf, validate-json-schemas]
+    if: always()
+    steps:
+      - name: Check Results
+        run: |
+          echo "## Specification Validation Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.lint-openapi.result }}" == "success" ]; then
+            echo "✅ OpenAPI validation passed" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.lint-openapi.result }}" == "skipped" ]; then
+            echo "⏭️ OpenAPI validation skipped" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ OpenAPI validation failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.lint-asyncapi.result }}" == "success" ]; then
+            echo "✅ AsyncAPI validation passed" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.lint-asyncapi.result }}" == "skipped" ]; then
+            echo "⏭️ AsyncAPI validation skipped" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ AsyncAPI validation failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.lint-protobuf.result }}" == "success" ]; then
+            echo "✅ Protobuf validation passed" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.lint-protobuf.result }}" == "skipped" ]; then
+            echo "⏭️ Protobuf validation skipped" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Protobuf validation failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.validate-json-schemas.result }}" == "success" ]; then
+            echo "✅ JSON Schema validation passed" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.validate-json-schemas.result }}" == "skipped" ]; then
+            echo "⏭️ JSON Schema validation skipped" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ JSON Schema validation failed" >> $GITHUB_STEP_SUMMARY
+          fi

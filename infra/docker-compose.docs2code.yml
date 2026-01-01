@@ -1,0 +1,105 @@
+# GENERATED FILE - DO NOT EDIT MANUALLY
+# Source: docs-to-code-pipeline
+# Generated: 2026-01-01T00:00:00Z
+# Regenerate: Managed by repository template
+#
+# Docs-to-Code Pipeline Development Services
+# Usage: docker compose -f infra/docker-compose.docs2code.yml up -d
+
+version: '3.8'
+
+services:
+  # OpenAPI Generator - Generate clients from specs
+  openapi-generator:
+    image: openapitools/openapi-generator-cli:v7.2.0
+    volumes:
+      - ../specs:/specs:ro
+      - ../generated:/generated
+      - ../config:/config:ro
+      - ../templates:/templates:ro
+    working_dir: /specs
+    profiles:
+      - generate
+    command: ["generate", "-i", "/specs/openapi/openapi.yaml", "-g", "python", "-o", "/generated/clients/python", "-c", "/config/openapi-generator-python.yaml"]
+
+  # Swagger UI - Interactive API documentation
+  swagger-ui:
+    image: swaggerapi/swagger-ui:v5.10.3
+    ports:
+      - "8080:8080"
+    volumes:
+      - ../specs/openapi:/usr/share/nginx/html/specs:ro
+    environment:
+      SWAGGER_JSON: /specs/openapi.yaml
+      BASE_URL: /swagger
+    profiles:
+      - docs
+
+  # ReDoc - Beautiful API documentation
+  redoc:
+    image: redocly/redoc:v2.1.3
+    ports:
+      - "8081:80"
+    volumes:
+      - ../specs/openapi/openapi.yaml:/usr/share/nginx/html/openapi.yaml:ro
+    environment:
+      SPEC_URL: openapi.yaml
+    profiles:
+      - docs
+
+  # Prism Mock Server - Mock API from OpenAPI spec
+  prism-mock:
+    image: stoplight/prism:5
+    ports:
+      - "4010:4010"
+    volumes:
+      - ../specs/openapi:/specs:ro
+    command: mock -h 0.0.0.0 /specs/openapi.yaml
+    profiles:
+      - mock
+
+  # AsyncAPI Studio - Event documentation
+  asyncapi-studio:
+    image: asyncapi/studio:latest
+    ports:
+      - "8082:80"
+    volumes:
+      - ../specs/asyncapi:/app/specs:ro
+    profiles:
+      - docs
+
+  # Buf - Protobuf tooling
+  buf:
+    image: bufbuild/buf:latest
+    volumes:
+      - ../specs/protobuf:/workspace/specs:ro
+      - ../config:/workspace/config:ro
+      - ../generated/proto:/workspace/generated
+    working_dir: /workspace
+    profiles:
+      - generate
+    command: ["generate", "specs", "--template", "config/buf.gen.yaml"]
+
+  # JSON Schema validator
+  json-schema-validator:
+    image: node:20-alpine
+    volumes:
+      - ../specs:/specs:ro
+    working_dir: /specs
+    profiles:
+      - validate
+    command: ["sh", "-c", "npm install -g ajv-cli ajv-formats && ajv compile -s /specs/json-schema/*.schema.json --spec=draft2020 -c ajv-formats"]
+
+  # Redocly CLI - OpenAPI linting
+  redocly:
+    image: redocly/cli:latest
+    volumes:
+      - ../specs:/specs:ro
+    working_dir: /specs
+    profiles:
+      - validate
+    command: ["lint", "openapi/openapi.yaml"]
+
+networks:
+  default:
+    name: docs2code-network

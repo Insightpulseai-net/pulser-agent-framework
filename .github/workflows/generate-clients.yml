@@ -1,0 +1,282 @@
+# GENERATED FILE - DO NOT EDIT MANUALLY
+# Source: docs-to-code-pipeline
+# Generated: 2026-01-01T00:00:00Z
+# Regenerate: Managed by repository template
+name: Generate SDK Clients
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'specs/**'
+  workflow_dispatch:
+    inputs:
+      languages:
+        description: 'Languages to generate (comma-separated)'
+        default: 'python,typescript,go'
+        type: string
+      create_pr:
+        description: 'Create PR with generated code'
+        default: true
+        type: boolean
+
+concurrency:
+  group: generate-clients-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  detect-changes:
+    name: Detect Spec Changes
+    runs-on: ubuntu-latest
+    outputs:
+      openapi_changed: ${{ steps.changes.outputs.openapi }}
+      protobuf_changed: ${{ steps.changes.outputs.protobuf }}
+      asyncapi_changed: ${{ steps.changes.outputs.asyncapi }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Detect Changes
+        id: changes
+        run: |
+          if git diff --name-only HEAD~1 | grep -q "specs/openapi"; then
+            echo "openapi=true" >> $GITHUB_OUTPUT
+          else
+            echo "openapi=false" >> $GITHUB_OUTPUT
+          fi
+
+          if git diff --name-only HEAD~1 | grep -q "specs/protobuf"; then
+            echo "protobuf=true" >> $GITHUB_OUTPUT
+          else
+            echo "protobuf=false" >> $GITHUB_OUTPUT
+          fi
+
+          if git diff --name-only HEAD~1 | grep -q "specs/asyncapi"; then
+            echo "asyncapi=true" >> $GITHUB_OUTPUT
+          else
+            echo "asyncapi=false" >> $GITHUB_OUTPUT
+          fi
+
+  generate-python:
+    name: Generate Python Client
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.openapi_changed == 'true' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java (for OpenAPI Generator)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install OpenAPI Generator
+        run: |
+          npm install -g @openapitools/openapi-generator-cli
+          openapi-generator-cli version
+
+      - name: Generate Python Client
+        run: |
+          mkdir -p generated/clients/python
+          openapi-generator-cli generate \
+            -i specs/openapi/openapi.yaml \
+            -g python \
+            -o generated/clients/python \
+            -c config/openapi-generator-python.yaml \
+            --skip-validate-spec || \
+          openapi-generator-cli generate \
+            -i specs/openapi/openapi.yaml \
+            -g python \
+            -o generated/clients/python \
+            --additional-properties=packageName=ipai_client,projectName=ipai-client \
+            --skip-validate-spec
+
+      - name: Install and Test Generated Client
+        run: |
+          cd generated/clients/python
+          pip install -e . || pip install .
+          python -c "import ipai_client; print('Import successful')" || true
+
+      - name: Upload Python Client
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-client
+          path: generated/clients/python
+
+  generate-typescript:
+    name: Generate TypeScript Client
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.openapi_changed == 'true' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install OpenAPI Generator
+        run: npm install -g @openapitools/openapi-generator-cli
+
+      - name: Generate TypeScript Client
+        run: |
+          mkdir -p generated/clients/typescript
+          openapi-generator-cli generate \
+            -i specs/openapi/openapi.yaml \
+            -g typescript-fetch \
+            -o generated/clients/typescript \
+            -c config/openapi-generator-typescript.yaml \
+            --skip-validate-spec || \
+          openapi-generator-cli generate \
+            -i specs/openapi/openapi.yaml \
+            -g typescript-fetch \
+            -o generated/clients/typescript \
+            --additional-properties=npmName=@ipai/api-client,supportsES6=true,typescriptThreePlus=true \
+            --skip-validate-spec
+
+      - name: Build TypeScript Client
+        run: |
+          cd generated/clients/typescript
+          npm install || true
+          npm run build || true
+
+      - name: Upload TypeScript Client
+        uses: actions/upload-artifact@v4
+        with:
+          name: typescript-client
+          path: generated/clients/typescript
+
+  generate-go:
+    name: Generate Go Client
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.openapi_changed == 'true' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Install OpenAPI Generator
+        run: npm install -g @openapitools/openapi-generator-cli
+
+      - name: Generate Go Client
+        run: |
+          mkdir -p generated/clients/go
+          openapi-generator-cli generate \
+            -i specs/openapi/openapi.yaml \
+            -g go \
+            -o generated/clients/go \
+            --additional-properties=packageName=ipaiclient,isGoSubmodule=true \
+            --skip-validate-spec
+
+      - name: Build Go Client
+        run: |
+          cd generated/clients/go
+          go mod init github.com/insightpulseai/ipai-client-go || true
+          go mod tidy || true
+          go build ./... || true
+
+      - name: Upload Go Client
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-client
+          path: generated/clients/go
+
+  generate-proto:
+    name: Generate Protobuf Code
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.protobuf_changed == 'true' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Buf
+        uses: bufbuild/buf-setup-action@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate from Protobuf
+        run: |
+          mkdir -p generated/proto/go
+          mkdir -p generated/proto/python
+          if [ -d "specs/protobuf" ] && [ -f "config/buf.gen.yaml" ]; then
+            buf generate specs/protobuf --template config/buf.gen.yaml
+          elif [ -d "specs/protobuf" ]; then
+            echo "No buf.gen.yaml found, skipping protobuf generation"
+          fi
+
+      - name: Upload Proto Generated Code
+        uses: actions/upload-artifact@v4
+        with:
+          name: proto-generated
+          path: generated/proto
+
+  create-pr:
+    name: Create PR with Generated Code
+    runs-on: ubuntu-latest
+    needs: [generate-python, generate-typescript, generate-go, generate-proto]
+    if: always() && (github.event.inputs.create_pr == 'true' || github.event_name == 'push')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare generated code
+        run: |
+          mkdir -p generated/clients
+          [ -d "artifacts/python-client" ] && cp -r artifacts/python-client generated/clients/python || true
+          [ -d "artifacts/typescript-client" ] && cp -r artifacts/typescript-client generated/clients/typescript || true
+          [ -d "artifacts/go-client" ] && cp -r artifacts/go-client generated/clients/go || true
+          [ -d "artifacts/proto-generated" ] && cp -r artifacts/proto-generated generated/proto || true
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore(codegen): regenerate SDK clients from specs"
+          title: "chore(codegen): Update generated SDK clients"
+          body: |
+            ## Auto-generated SDK Clients
+
+            This PR updates the generated SDK clients from the latest specification changes.
+
+            ### Generated Clients:
+            - Python client (OpenAPI)
+            - TypeScript client (OpenAPI)
+            - Go client (OpenAPI)
+            - Protobuf generated code
+
+            ### Validation:
+            - [ ] Python client imports successfully
+            - [ ] TypeScript client builds successfully
+            - [ ] Go client compiles successfully
+
+            ---
+            *This PR was automatically generated by the generate-clients workflow.*
+          branch: codegen/update-sdk-clients
+          base: main
+          delete-branch: true

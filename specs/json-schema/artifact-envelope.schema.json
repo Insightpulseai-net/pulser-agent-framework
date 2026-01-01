@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://insightpulseai.net/schemas/artifact-envelope.schema.json",
+  "title": "Artifact Envelope",
+  "description": "Required envelope for all artifact ingestion - ensures deterministic routing",
+  "type": "object",
+  "required": [
+    "artifact_id",
+    "artifact_type",
+    "schema_version",
+    "source",
+    "created_at",
+    "content_sha256",
+    "intent",
+    "target",
+    "files"
+  ],
+  "properties": {
+    "artifact_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier for the artifact"
+    },
+    "artifact_type": {
+      "type": "string",
+      "enum": [
+        "doc",
+        "pdf",
+        "csv",
+        "sql",
+        "openapi",
+        "json_schema",
+        "code",
+        "logs",
+        "dataset",
+        "protobuf",
+        "asyncapi",
+        "graphql"
+      ],
+      "description": "Type of artifact for routing"
+    },
+    "schema_version": {
+      "type": "string",
+      "pattern": "^v\\d+$",
+      "examples": ["v1"],
+      "description": "Schema version for envelope format"
+    },
+    "source": {
+      "type": "string",
+      "enum": ["odoo", "supabase", "gdrive", "manual", "agent"],
+      "description": "Source system of the artifact"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of artifact creation"
+    },
+    "content_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "SHA-256 hash of content for idempotent ingestion"
+    },
+    "intent": {
+      "type": "string",
+      "enum": ["train", "eval", "etl", "docs2code", "debug", "release"],
+      "description": "Processing intent for routing"
+    },
+    "target": {
+      "type": "string",
+      "enum": ["ml", "odoo", "superset", "workbench"],
+      "description": "Target system for processing"
+    },
+    "constraints": {
+      "type": "object",
+      "properties": {
+        "no_write": {
+          "type": "boolean",
+          "default": false,
+          "description": "If true, artifact is read-only"
+        },
+        "pii": {
+          "type": "string",
+          "enum": ["unknown", "none", "present"],
+          "default": "unknown",
+          "description": "PII status of content"
+        },
+        "allowed_ops": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["parse", "index", "train", "eval", "generate_code"]
+          },
+          "description": "Allowed operations on this artifact"
+        }
+      }
+    },
+    "files": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["path", "mime"],
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Relative path to file"
+          },
+          "mime": {
+            "type": "string",
+            "description": "MIME type of file"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "File size in bytes"
+          }
+        }
+      },
+      "description": "List of files included in the artifact"
+    }
+  },
+  "additionalProperties": false
+}

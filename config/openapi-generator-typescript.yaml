@@ -1,0 +1,36 @@
+# GENERATED FILE - DO NOT EDIT MANUALLY
+# Source: docs-to-code-pipeline
+# Generated: 2026-01-01T00:00:00Z
+# Regenerate: make generate-typescript
+generatorName: typescript-fetch
+outputDir: generated/clients/typescript
+additionalProperties:
+  npmName: "@ipai/api-client"
+  npmVersion: 0.1.0
+  npmRepository: https://npm.pkg.github.com
+  supportsES6: true
+  typescriptThreePlus: true
+  withInterfaces: true
+  useSingleRequestParameter: true
+  prefixParameterInterfaces: false
+  enumPropertyNaming: UPPERCASE
+
+# Template customization (optional)
+# templateDir: templates/typescript-client
+
+# Type mappings
+typeMappings:
+  DateTime: Date
+  date: Date
+
+# Files to preserve during regeneration
+ignoreFileOverride: |
+  .gitignore
+  README.md
+  package-lock.json
+  CHANGELOG.md
+  .github/
+
+# Import mappings
+importMappings:
+  Date: date-fns

@@ -1,0 +1,135 @@
+# GENERATED FILE - DO NOT EDIT MANUALLY
+# Source: docs-to-code-pipeline
+# Generated: 2026-01-01T00:00:00Z
+# Regenerate: Managed by repository template
+---
+name: dump_router
+version: 1.0.0
+description: |
+  Routes incoming artifacts to appropriate pipelines based on their envelope metadata.
+  Ensures deterministic routing - no guessing from filenames or content.
+
+# Artifact types this skill can handle
+accepted_artifact_types:
+  - doc
+  - pdf
+  - csv
+  - sql
+  - openapi
+  - json_schema
+  - code
+  - logs
+  - dataset
+  - protobuf
+  - asyncapi
+  - graphql
+  - markdown
+  - notebook
+
+# Intent-based routing rules
+routing_rules:
+  - intent: train
+    target: ml
+    pipeline: pipelines/model/10_make_sft_jsonl.py
+    description: Route training data to ML pipeline
+
+  - intent: eval
+    target: ml
+    pipeline: pipelines/model/30_eval.py
+    description: Route evaluation data to ML evaluation
+
+  - intent: etl
+    target: workbench
+    pipeline: pipelines/ingest/parse.py
+    description: Route ETL artifacts to ingest pipeline
+
+  - intent: docs2code
+    target: workbench
+    pipeline: pipelines/build/code_generator.py
+    description: Route docs for code generation
+
+  - intent: debug
+    target: workbench
+    pipeline: pipelines/ingest/parse.py
+    description: Route debug artifacts for analysis
+
+  - intent: release
+    target: storage
+    pipeline: pipelines/release/__init__.py
+    description: Route release artifacts to storage
+
+  - intent: index
+    target: knowledge
+    pipeline: pipelines/ingest/extractors/base_extractor.py
+    description: Route documents for knowledge base indexing
+
+# Required envelope fields (hard gate)
+required_fields:
+  - artifact_id
+  - artifact_type
+  - schema_version
+  - source
+  - created_at
+  - content_sha256
+  - intent
+  - target
+  - files
+
+# Validation behavior
+validation:
+  # If envelope is missing/invalid, return BLOCKED
+  on_invalid_envelope: BLOCKED
+
+  # Check for idempotency by content hash
+  check_idempotency: true
+  idempotency_key: content_sha256
+
+  # If artifact already exists (by hash), link to existing
+  on_duplicate: link_to_existing
+
+# Output locations
+storage:
+  raw_artifacts: storage/raw/
+  metadata_db: postgres://workbench.artifacts
+  processed: storage/processed/
+
+# Pipeline dispatch configuration
+dispatch:
+  # Register metadata before dispatch
+  pre_dispatch:
+    - action: register_metadata
+      target: workbench.artifacts
+
+  # Post-dispatch actions
+  post_dispatch:
+    - action: emit_event
+      channel: ipai.artifacts.routed
+
+# Logging and tracing
+observability:
+  log_level: INFO
+  trace_enabled: true
+  metrics:
+    - artifact_count_by_type
+    - artifact_count_by_intent
+    - routing_latency_ms
+    - blocked_count
+
+# Error handling
+error_handling:
+  # Retry transient failures
+  max_retries: 3
+  retry_delay_ms: 1000
+
+  # On permanent failure
+  on_failure: log_and_continue
+
+# Skill metadata
+metadata:
+  author: InsightPulse AI
+  license: AGPL-3.0
+  tags:
+    - routing
+    - artifact
+    - ingestion
+    - pipeline

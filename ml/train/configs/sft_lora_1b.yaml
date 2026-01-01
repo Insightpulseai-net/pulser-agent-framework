@@ -1,0 +1,69 @@
+# GENERATED FILE - DO NOT EDIT MANUALLY
+# Source: docs-to-code-pipeline Model Factory
+# Generated: 2026-01-01T00:00:00Z
+# Regenerate: Managed by repository template
+---
+# SFT LoRA Training Configuration for 1B Parameter Models
+# Suitable for: TinyLlama, Phi-2, StableLM-3B
+
+training_type: sft
+
+# Model configuration
+model_name: "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+load_in_8bit: true
+load_in_4bit: false
+
+# LoRA configuration
+use_lora: true
+lora_r: 16
+lora_alpha: 32
+lora_dropout: 0.05
+target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+  - gate_proj
+  - up_proj
+  - down_proj
+
+# Training hyperparameters
+epochs: 3
+batch_size: 4
+gradient_accumulation_steps: 4
+learning_rate: 2.0e-4
+warmup_ratio: 0.03
+weight_decay: 0.01
+max_grad_norm: 1.0
+
+# Sequence configuration
+max_seq_length: 2048
+packing: true
+
+# Precision
+fp16: true
+bf16: false
+
+# Logging and checkpointing
+logging_steps: 10
+save_strategy: epoch
+save_total_limit: 3
+report_to:
+  - tensorboard
+  - wandb
+
+# Optimization
+optim: adamw_torch
+lr_scheduler_type: cosine
+
+# Dataset format
+# Expected format: {"instruction": "...", "input": "...", "output": "..."}
+dataset_format: alpaca
+
+# Evaluation
+eval_strategy: epoch
+eval_steps: 100
+
+# Hardware
+gradient_checkpointing: true
+deepspeed: null  # Optional: path to deepspeed config

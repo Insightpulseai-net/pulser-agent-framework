@@ -1,0 +1,10 @@
+# ML Datasets Requirements
+# Install: pip install -r ml/datasets/requirements.txt
+
+datasets>=2.14.0
+transformers>=4.35.0
+pandas>=2.0.0
+pyarrow>=14.0.0
+jsonlines>=4.0.0
+pyyaml>=6.0
+tqdm>=4.66.0

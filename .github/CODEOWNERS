@@ -1,0 +1,51 @@
+# CODEOWNERS - Defines code ownership for pull request reviews
+#
+# Each line is a file pattern followed by one or more owners.
+# Order matters: later patterns override earlier ones.
+
+# Default owners for everything
+* @Insightpulseai-net/platform-team
+
+# Specifications - require spec review
+/specs/ @Insightpulseai-net/api-team
+/specs/openapi/ @Insightpulseai-net/api-team
+/specs/asyncapi/ @Insightpulseai-net/api-team
+/specs/protobuf/ @Insightpulseai-net/api-team
+/specs/json-schema/ @Insightpulseai-net/api-team
+/specs/artifacts/ @Insightpulseai-net/platform-team
+
+# ML / Model Factory
+/ml/ @Insightpulseai-net/ml-team
+/pipelines/model/ @Insightpulseai-net/ml-team
+
+# Infrastructure
+/infra/ @Insightpulseai-net/devops-team
+/.github/workflows/ @Insightpulseai-net/devops-team
+
+# Generated code - auto-generated, minimal review
+/generated/ @Insightpulseai-net/platform-team
+
+# Configuration
+/config/ @Insightpulseai-net/platform-team
+
+# Database migrations
+/db/ @Insightpulseai-net/platform-team
+/supabase/migrations/ @Insightpulseai-net/platform-team
+
+# Odoo modules
+/odoo/ @Insightpulseai-net/odoo-team
+
+# Documentation
+/docs/ @Insightpulseai-net/platform-team
+README.md @Insightpulseai-net/platform-team
+
+# Security-sensitive files
+/.env* @Insightpulseai-net/security-team
+/secrets/ @Insightpulseai-net/security-team
+
+# Skills and agents
+/skills/ @Insightpulseai-net/platform-team
+/agents/ @Insightpulseai-net/platform-team
+
+# Packages
+/packages/ @Insightpulseai-net/platform-team

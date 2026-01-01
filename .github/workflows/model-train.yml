@@ -1,0 +1,188 @@
+# GENERATED FILE - DO NOT EDIT MANUALLY
+# Source: docs-to-code-pipeline Model Factory
+# Generated: 2026-01-01T00:00:00Z
+# Regenerate: Managed by repository template
+name: Model Training
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Unique run identifier'
+        required: true
+        type: string
+      config:
+        description: 'Training config file (e.g., sft_lora_1b.yaml)'
+        required: true
+        type: string
+      dataset_version:
+        description: 'Dataset version to use'
+        required: true
+        type: string
+      gpu_runner:
+        description: 'GPU runner label'
+        default: 'gpu'
+        type: string
+
+concurrency:
+  group: model-train-${{ github.event.inputs.run_id }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  prepare-dataset:
+    name: Prepare Training Dataset
+    runs-on: ubuntu-latest
+    outputs:
+      dataset_path: ${{ steps.prepare.outputs.dataset_path }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies
+        run: |
+          pip install -r ml/datasets/requirements.txt || pip install datasets transformers
+
+      - name: Prepare Dataset
+        id: prepare
+        run: |
+          echo "Preparing dataset version: ${{ github.event.inputs.dataset_version }}"
+          python pipelines/model/10_make_sft_jsonl.py \
+            --version "${{ github.event.inputs.dataset_version }}" \
+            --output data/train.jsonl \
+            || echo "Using existing dataset"
+          echo "dataset_path=data/train.jsonl" >> $GITHUB_OUTPUT
+
+      - name: Upload Dataset Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: training-dataset-${{ github.event.inputs.run_id }}
+          path: data/
+
+  train:
+    name: Train Model
+    runs-on: [self-hosted, "${{ github.event.inputs.gpu_runner }}"]
+    needs: prepare-dataset
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check GPU Availability
+        run: |
+          echo "Checking GPU availability..."
+          nvidia-smi || echo "No NVIDIA GPU detected"
+          python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')" 2>/dev/null || echo "PyTorch not installed yet"
+
+      - name: Setup Python Environment
+        run: |
+          python -m venv .venv
+          . .venv/bin/activate
+          pip install -U pip
+          pip install -r ml/train/requirements.txt || pip install torch transformers peft accelerate bitsandbytes
+
+      - name: Download Dataset
+        uses: actions/download-artifact@v4
+        with:
+          name: training-dataset-${{ github.event.inputs.run_id }}
+          path: data/
+
+      - name: Run Training
+        id: train
+        run: |
+          . .venv/bin/activate
+          echo "Starting training run: ${{ github.event.inputs.run_id }}"
+          echo "Config: ${{ github.event.inputs.config }}"
+
+          python ml/train/run.py \
+            --config "ml/train/configs/${{ github.event.inputs.config }}" \
+            --run-id "${{ github.event.inputs.run_id }}" \
+            --dataset "${{ needs.prepare-dataset.outputs.dataset_path }}" \
+            --output-dir "runs/${{ github.event.inputs.run_id }}"
+
+          echo "model_path=runs/${{ github.event.inputs.run_id }}" >> $GITHUB_OUTPUT
+
+      - name: Upload Model Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-${{ github.event.inputs.run_id }}
+          path: runs/${{ github.event.inputs.run_id }}/
+
+  evaluate:
+    name: Evaluate Model
+    runs-on: [self-hosted, "${{ github.event.inputs.gpu_runner }}"]
+    needs: train
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python Environment
+        run: |
+          python -m venv .venv
+          . .venv/bin/activate
+          pip install -U pip
+          pip install -r ml/eval/requirements.txt || pip install torch transformers datasets evaluate
+
+      - name: Download Model
+        uses: actions/download-artifact@v4
+        with:
+          name: model-${{ github.event.inputs.run_id }}
+          path: runs/${{ github.event.inputs.run_id }}/
+
+      - name: Run Evaluation
+        id: eval
+        run: |
+          . .venv/bin/activate
+          echo "Running evaluation for: ${{ github.event.inputs.run_id }}"
+
+          python ml/eval/harness/run.py \
+            --run-id "${{ github.event.inputs.run_id }}" \
+            --model-path "runs/${{ github.event.inputs.run_id }}" \
+            --output-dir "evals/${{ github.event.inputs.run_id }}"
+
+      - name: Upload Evaluation Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-${{ github.event.inputs.run_id }}
+          path: evals/${{ github.event.inputs.run_id }}/
+
+  summary:
+    name: Training Summary
+    runs-on: ubuntu-latest
+    needs: [prepare-dataset, train, evaluate]
+    if: always()
+    steps:
+      - name: Generate Summary
+        run: |
+          echo "## Model Training Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Run ID:** ${{ github.event.inputs.run_id }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Config:** ${{ github.event.inputs.config }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Dataset Version:** ${{ github.event.inputs.dataset_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "### Pipeline Results" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ needs.prepare-dataset.result }}" == "success" ]; then
+            echo "✅ Dataset preparation completed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Dataset preparation failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.train.result }}" == "success" ]; then
+            echo "✅ Model training completed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Model training failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.evaluate.result }}" == "success" ]; then
+            echo "✅ Model evaluation completed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Model evaluation failed" >> $GITHUB_STEP_SUMMARY
+          fi

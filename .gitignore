@@ -50,3 +50,30 @@ env/
 
 # Keep template but not actual .env
 !.env.template
+
+# Generated code (keep README only)
+generated/clients/
+generated/servers/
+generated/proto/
+!generated/README.md
+!generated/.gitkeep
+
+# ML artifacts
+runs/
+evals/
+release/
+data/
+ml/datasets/.cache/
+ml/datasets/processed/
+*.pt
+*.bin
+*.safetensors
+*.onnx
+wandb/
+mlruns/
+
+# Virtual environments
+.venv/
+
+# Jupyter
+.ipynb_checkpoints/

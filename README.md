@@ -1,206 +1,291 @@
-# Data Engineering Workbench
+# Pulser Agent Framework
 
-A Databricks-style, self-hosted data engineering platform for the InsightPulseAI ecosystem.
+A comprehensive platform for specification-driven code generation, ML model training, and data engineering workbench operations.
 
-## Overview
-
-The Data Engineering Workbench serves as the central hub for building, testing, and deploying data pipelines. It sits at the heart of the development pipeline—after design (Figma) and planning (Spec Kit), and before production deployment.
+## What's in This Repo
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    DEVELOPMENT PIPELINE                         │
-│                                                                 │
-│   Design        Planning        Development      Deployment     │
-│   ──────        ────────        ───────────      ──────────     │
-│                                                                 │
-│   Figma    →    Spec Kit   →   WORKBENCH   →   Production      │
-│   Dev Mode      PRD/Tasks       Notebooks       Odoo/Superset   │
-│                                 Pipelines                       │
-│                                 Data Catalog                    │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+pulser-agent-framework/
+├── .github/workflows/        # CI/CD pipelines
+├── agents/                   # Agent skill definitions
+├── apps/workbench-api/       # FastAPI backend for workbench
+├── config/                   # Generator configurations (OpenAPI, Buf)
+├── db/migrations/            # SQL migrations for workbench schema
+├── docs/                     # Documentation and checklists
+├── generated/                # Auto-generated SDK clients (gitignored)
+├── infra/                    # Docker Compose, nginx, runners
+├── migrations/               # Alembic migrations
+├── ml/                       # Model Factory (train, eval, serve)
+├── n8n/workflows/            # n8n automation templates
+├── notebooks/                # Jupyter notebooks
+├── odoo/addons/              # ipai_* Odoo modules
+├── ops/                      # Operations runbooks
+├── packages/agent-framework/ # Python agent framework package
+├── pipelines/                # Data and model pipelines
+├── prompts/                  # AI system prompts
+├── scripts/                  # Utility scripts
+├── skills/                   # Agent skill configs (YAML)
+├── spec/                     # Spec Kit (PRDs, plans, tasks)
+├── specs/                    # API specifications (OpenAPI, Protobuf, AsyncAPI)
+├── supabase/migrations/      # Supabase migrations
+├── templates/                # Custom generator templates
+├── tests/                    # Test suites (unit, integration, API, performance)
+├── tools/                    # CLI tools (knowledge, parity)
+├── uat/                      # User acceptance tests
+└── workflows/                # n8n workflow exports
 ```
 
-## Key Features
+## Quickstart
 
-- **Notebooks**: Interactive SQL and Python development environment
-- **Pipelines**: Visual and code-based ETL/ELT workflow orchestration
-- **Data Catalog**: Schema discovery, lineage tracking, and metadata management
-- **Medallion Architecture**: Bronze → Silver → Gold data layers
-- **Integrations**: Native connections to Odoo CE/OCA 18, Superset, OCR services, and AI agents
+### Prerequisites
+
+- Docker and Docker Compose
+- Python 3.11+
+- Node.js 20+ (for code generation)
+- Make
+
+### Local Development
+
+```bash
+# Clone and setup
+git clone https://github.com/Insightpulseai-net/pulser-agent-framework.git
+cd pulser-agent-framework
+
+# Initialize Python environment
+make init
+
+# Start workbench services
+make stack-up
+
+# Validate specifications
+make spec-validate
+
+# Generate SDK clients
+make generate-all
+```
+
+### Environment Configuration
+
+```bash
+cp .env.template .env
+cp infra/.env.workbench.example infra/.env.workbench
+# Edit files with your values
+```
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    DATA ENGINEERING WORKBENCH                   │
-├─────────────────────────────────────────────────────────────────┤
+│                    DEVELOPMENT PIPELINE                         │
 │                                                                 │
-│   Frontend (Next.js)     API (FastAPI)      Execution Layer    │
-│   ├── Dashboard          ├── Notebooks      ├── Jupyter        │
-│   ├── Notebook Editor    ├── Pipelines      ├── DuckDB         │
-│   ├── Pipeline Builder   ├── Catalog        ├── Temporal       │
-│   └── Data Catalog       └── Integrations   └── Redis          │
+│   Specs           Workbench         Pipelines       Deploy      │
+│   ─────           ─────────         ─────────       ──────      │
 │                                                                 │
-├─────────────────────────────────────────────────────────────────┤
-│                          STORAGE LAYER                          │
-│                                                                 │
-│   PostgreSQL (Medallion)     MinIO (Objects)    File Storage   │
-│   ├── bronze.*               ├── documents      └── notebooks  │
-│   ├── silver.*               ├── uploads                       │
-│   ├── gold.*                 └── exports                       │
-│   └── workbench.*                                              │
+│   OpenAPI    →    Notebooks    →    Build/Test  →  Production   │
+│   AsyncAPI        API/Frontend      ML Training     Odoo        │
+│   Protobuf        Data Catalog      Codegen         Superset    │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-## Repository Structure
+### Storage Layer
 
-```
-archi-agent-framework/
-├── spec/                          # Spec Kit (governance + requirements)
-│   └── data-engineering-workbench/
-│       ├── constitution.md        # Non-negotiable principles
-│       ├── prd.md                 # Product requirements
-│       ├── plan.md                # Implementation plan
-│       └── tasks.md               # Task breakdown
-│
-├── infra/                         # Infrastructure
-│   ├── docker-compose.workbench.yml
-│   ├── nginx/
-│   │   └── workbench.conf
-│   ├── postgres/
-│   │   └── init/
-│   ├── scripts/
-│   │   ├── setup-workbench-droplet.sh
-│   │   ├── enable-letsencrypt.sh
-│   │   └── backup.sh
-│   └── .env.workbench.example
-│
-├── apps/                          # Application code
-│   └── workbench-api/
-│       ├── app/
-│       │   ├── api/v1/endpoints/
-│       │   ├── core/
-│       │   ├── models/
-│       │   └── middleware/
-│       ├── Dockerfile
-│       └── requirements.txt
-│
-├── workflows/                     # n8n workflow templates
-│   ├── month-end-finance.json
-│   ├── ocr-to-odoo-expense.json
-│   ├── agent-orchestrator.json
-│   └── README.md
-│
-└── ops/                           # Operations documentation
-    ├── monitoring.md
-    ├── backups.md
-    └── runbook-workbench-outage.md
-```
+| Component | Purpose |
+|-----------|---------|
+| PostgreSQL | Medallion architecture (bronze.*, silver.*, gold.*, workbench.*) |
+| MinIO | Object storage (documents, uploads, exports) |
+| Supabase | Knowledge base and vector storage |
 
-## Quick Start
+## Pipelines & Workflows
 
-### Prerequisites
+### Data Pipelines (`pipelines/`)
 
-- DigitalOcean account with droplet(s)
-- Domain configured (e.g., workbench.insightpulseai.net)
-- SSH access to target droplet
+| Pipeline | Description |
+|----------|-------------|
+| `ingest/parse.py` | Document ingestion and parsing |
+| `build/code_generator.py` | Spec-to-code generation |
+| `build/compliance_validator.py` | Compliance checks |
+| `model/10_make_sft_jsonl.py` | Build SFT training datasets |
+| `model/30_eval.py` | Model evaluation harness |
 
-### 1. Clone and Configure
+### GitHub Actions (`.github/workflows/`)
+
+| Workflow | Trigger | Purpose |
+|----------|---------|---------|
+| `validate-specs.yml` | PR to specs/ | Lint OpenAPI, AsyncAPI, Protobuf |
+| `detect-breaking-changes.yml` | PR to specs/ | Block breaking API changes |
+| `generate-clients.yml` | Push to main (specs/) | Generate Python/TS/Go SDKs |
+| `release-sdks.yml` | Release published | Publish to PyPI/NPM |
+| `model-train.yml` | Manual dispatch | Train models (GPU runner) |
+| `model-release.yml` | Manual dispatch | Export and release models |
+| `comprehensive-tests.yml` | PR | Full test suite |
+
+## Database & Migrations
+
+### Apply Migrations
 
 ```bash
-# Clone repository
-git clone https://github.com/your-org/archi-agent-framework.git
-cd archi-agent-framework
+# Workbench schema (PostgreSQL)
+make db-migrate
 
-# Copy and configure environment
-cp infra/.env.workbench.example infra/.env.workbench
-nano infra/.env.workbench  # Fill in your values
+# Supabase migrations
+cd supabase && supabase db push
 ```
 
-### 2. Deploy to Droplet
+### Key Tables
+
+- `workbench.artifacts` - Artifact registry with envelope metadata
+- `workbench.runs` - Pipeline execution tracking
+- `workbench.artifact_run_links` - Artifact-to-run relationships
+- `workbench.events` - Audit log
+
+## Code Generation
+
+### Generate SDK Clients
 
 ```bash
-# SSH to your droplet
-ssh root@YOUR_DROPLET_IP
+# All clients
+make generate-all
 
-# Run setup script
-curl -fsSL https://raw.githubusercontent.com/your-org/archi-agent-framework/main/infra/scripts/setup-workbench-droplet.sh | bash
-
-# Configure environment
-nano /opt/workbench/infra/.env.workbench
-
-# Enable SSL
-bash /opt/workbench/infra/scripts/enable-letsencrypt.sh workbench.insightpulseai.net admin@insightpulseai.net
-
-# Start services
-cd /opt/workbench/infra
-docker compose -f docker-compose.workbench.yml --env-file .env.workbench up -d
+# Individual languages
+make generate-python
+make generate-typescript
+make generate-go
+make generate-proto
 ```
 
-### 3. Verify Installation
+### Development Services
 
 ```bash
-# Check services
-docker compose -f docker-compose.workbench.yml ps
+# Start Swagger UI + ReDoc
+make docs2code-up
 
-# Test health endpoint
-curl https://workbench.insightpulseai.net/health
+# Start mock server
+make mock-server
+
+# Stop services
+make docs2code-down
 ```
 
-## Integration Points
+## ML Model Factory
 
-| Service | Endpoint | Purpose |
-|---------|----------|---------|
-| Odoo CE/OCA 18 | erp.insightpulseai.net | ERP data extraction |
-| Superset | superset.insightpulseai.net | Dashboard integration |
-| OCR Service | ocr.insightpulseai.net | Document extraction |
-| MCP/Agents | mcp.insightpulseai.net | AI agent orchestration |
-| n8n | n8n.insightpulseai.net | Workflow automation |
-
-## Documentation
-
-- **[Constitution](spec/data-engineering-workbench/constitution.md)** - Core principles and guardrails
-- **[PRD](spec/data-engineering-workbench/prd.md)** - Product requirements and use cases
-- **[Plan](spec/data-engineering-workbench/plan.md)** - Architecture and implementation phases
-- **[Tasks](spec/data-engineering-workbench/tasks.md)** - Detailed task breakdown
-- **[Monitoring](ops/monitoring.md)** - Metrics and alerting
-- **[Backups](ops/backups.md)** - Backup and recovery procedures
-- **[Runbook](ops/runbook-workbench-outage.md)** - Incident response
-
-## Development
-
-### Local Development
+### Training Pipeline
 
 ```bash
-# Start dependencies
-docker compose -f infra/docker-compose.workbench.yml up -d postgres redis minio
+# Install ML dependencies
+make ml-deps
 
-# Run API locally
-cd apps/workbench-api
-pip install -r requirements.txt
-uvicorn app.main:app --reload
+# Build dataset
+make ml-dataset VERSION=v1
 
-# Run frontend locally
-cd apps/workbench-frontend
-npm install
-npm run dev
+# Train model (requires GPU)
+make ml-train RUN_ID=run_001 CONFIG=sft_lora_1b.yaml
+
+# Evaluate
+make ml-eval RUN_ID=run_001
+
+# Export for release
+make ml-export RUN_ID=run_001 TAG=v0.1.0
 ```
 
-### Running Tests
+### GPU Runner Setup
+
+See `infra/runners/gpu-runner.md` for self-hosted GPU runner configuration.
+
+## Conventions
+
+### Artifact Envelope (Required for Ingestion)
+
+All artifacts must include an envelope with:
+- `artifact_id` (UUID)
+- `artifact_type` (doc, pdf, csv, sql, openapi, code, dataset, etc.)
+- `content_sha256` (idempotency key)
+- `intent` (train, eval, etl, docs2code, debug, release)
+- `target` (ml, odoo, superset, workbench)
+
+See `specs/artifacts/artifact_envelope.schema.json` for full schema.
+
+### Odoo Modules
+
+All custom modules use prefix `ipai_*` and follow Smart Delta patterns:
+- `ipai_expense_core` - Expense management
+- `ipai_cash_advance` - Cash advance tracking
+- `ipai_card_reconciliation` - Card statement reconciliation
+
+### Generated Code
+
+All generated files include header:
+```python
+# GENERATED FILE - DO NOT EDIT MANUALLY
+# Source: {specification_path}
+# Generated: {timestamp}
+# Regenerate: {command}
+```
+
+## How to Add New Components
+
+### New API Endpoint
+
+1. Add to `specs/openapi/openapi.yaml`
+2. Run `make spec-validate`
+3. Run `make generate-all`
+4. Implement in `apps/workbench-api/`
+
+### New Agent Skill
+
+1. Create `agents/YourAgent.SKILL.md`
+2. Add config to `skills/your_agent.yaml`
+3. Register in agent framework
+
+### New Odoo Module
+
+1. Create `odoo/addons/ipai_<name>/`
+2. Include `__manifest__.py`, `models/`, `views/`, `security/`
+3. Follow AGPL-3 license
+
+### New ML Training Config
+
+1. Add config to `ml/train/configs/`
+2. Run via `make ml-train CONFIG=your_config.yaml`
+
+## Troubleshooting
+
+### Spec Validation Fails
 
 ```bash
-cd apps/workbench-api
-pytest tests/ -v
+# Check OpenAPI syntax
+npx @redocly/cli lint specs/openapi/openapi.yaml
+
+# Check Protobuf
+buf lint specs/protobuf
+```
+
+### Code Generation Fails
+
+```bash
+# Install generator
+npm install -g @openapitools/openapi-generator-cli
+
+# Validate spec first
+swagger-cli validate specs/openapi/openapi.yaml
+```
+
+### Docker Services Won't Start
+
+```bash
+# Check logs
+make stack-logs
+
+# Reset containers
+make clean-all
+make stack-up
 ```
 
 ## License
 
-Proprietary - InsightPulseAI
+AGPL-3.0 - See LICENSE file
 
 ## Support
 
-- **Slack**: #data-engineering
-- **Issues**: GitHub Issues
-- **Documentation**: This repository
+- **Issues**: [GitHub Issues](https://github.com/Insightpulseai-net/pulser-agent-framework/issues)
+- **Slack**: #platform-engineering

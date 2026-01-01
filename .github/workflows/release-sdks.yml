@@ -1,0 +1,225 @@
+# GENERATED FILE - DO NOT EDIT MANUALLY
+# Source: docs-to-code-pipeline
+# Generated: 2026-01-01T00:00:00Z
+# Regenerate: Managed by repository template
+name: Release SDKs
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.0.0)'
+        required: true
+        type: string
+      publish_python:
+        description: 'Publish Python SDK to PyPI'
+        default: true
+        type: boolean
+      publish_npm:
+        description: 'Publish TypeScript SDK to NPM'
+        default: true
+        type: boolean
+      dry_run:
+        description: 'Dry run (do not actually publish)'
+        default: false
+        type: boolean
+
+concurrency:
+  group: release-sdks
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  prepare:
+    name: Prepare Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Determine Version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" == "release" ]; then
+            VERSION="${{ github.event.release.tag_name }}"
+            # Remove 'v' prefix if present
+            VERSION="${VERSION#v}"
+          else
+            VERSION="${{ github.event.inputs.version }}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Releasing version: $VERSION"
+
+  publish-python:
+    name: Publish Python SDK
+    runs-on: ubuntu-latest
+    needs: prepare
+    if: github.event.inputs.publish_python != 'false'
+    environment: pypi
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install OpenAPI Generator
+        run: npm install -g @openapitools/openapi-generator-cli
+
+      - name: Generate Python Client with Version
+        run: |
+          mkdir -p dist/python
+          openapi-generator-cli generate \
+            -i specs/openapi/openapi.yaml \
+            -g python \
+            -o dist/python \
+            --additional-properties=packageName=ipai_client,projectName=ipai-client,packageVersion=${{ needs.prepare.outputs.version }} \
+            --skip-validate-spec
+
+      - name: Build Package
+        run: |
+          cd dist/python
+          pip install build twine
+          python -m build
+
+      - name: Publish to PyPI
+        if: github.event.inputs.dry_run != 'true'
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+        run: |
+          cd dist/python
+          twine upload dist/* --verbose
+
+      - name: Dry Run - Show Package Info
+        if: github.event.inputs.dry_run == 'true'
+        run: |
+          cd dist/python
+          echo "Would publish the following packages:"
+          ls -la dist/
+          twine check dist/*
+
+  publish-npm:
+    name: Publish TypeScript SDK
+    runs-on: ubuntu-latest
+    needs: prepare
+    if: github.event.inputs.publish_npm != 'false'
+    environment: npm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install OpenAPI Generator
+        run: npm install -g @openapitools/openapi-generator-cli
+
+      - name: Generate TypeScript Client
+        run: |
+          mkdir -p dist/typescript
+          openapi-generator-cli generate \
+            -i specs/openapi/openapi.yaml \
+            -g typescript-fetch \
+            -o dist/typescript \
+            --additional-properties=npmName=@ipai/api-client,npmVersion=${{ needs.prepare.outputs.version }},supportsES6=true \
+            --skip-validate-spec
+
+      - name: Build Package
+        run: |
+          cd dist/typescript
+          npm install
+          npm run build || true
+
+      - name: Update Version
+        run: |
+          cd dist/typescript
+          npm version ${{ needs.prepare.outputs.version }} --no-git-tag-version --allow-same-version
+
+      - name: Publish to NPM
+        if: github.event.inputs.dry_run != 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          cd dist/typescript
+          npm publish --access public
+
+      - name: Dry Run - Show Package Info
+        if: github.event.inputs.dry_run == 'true'
+        run: |
+          cd dist/typescript
+          echo "Would publish the following package:"
+          npm pack --dry-run
+
+  create-github-release-assets:
+    name: Create Release Assets
+    runs-on: ubuntu-latest
+    needs: [prepare, publish-python, publish-npm]
+    if: always() && github.event_name == 'release'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Python Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+        continue-on-error: true
+
+      - name: Create SDK Archives
+        run: |
+          mkdir -p release-assets
+
+          # Create Python SDK archive
+          if [ -d "dist/python" ]; then
+            tar -czf release-assets/ipai-client-python-${{ needs.prepare.outputs.version }}.tar.gz -C dist python
+          fi
+
+          # Create TypeScript SDK archive
+          if [ -d "dist/typescript" ]; then
+            tar -czf release-assets/ipai-client-typescript-${{ needs.prepare.outputs.version }}.tar.gz -C dist typescript
+          fi
+
+      - name: Upload Release Assets
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release-assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  notify:
+    name: Notify Release
+    runs-on: ubuntu-latest
+    needs: [prepare, publish-python, publish-npm]
+    if: always()
+    steps:
+      - name: Generate Summary
+        run: |
+          echo "## SDK Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ needs.prepare.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.publish-python.result }}" == "success" ]; then
+            echo "✅ Python SDK published to PyPI" >> $GITHUB_STEP_SUMMARY
+            echo "   \`pip install ipai-client==${{ needs.prepare.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Python SDK publish failed or skipped" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.publish-npm.result }}" == "success" ]; then
+            echo "✅ TypeScript SDK published to NPM" >> $GITHUB_STEP_SUMMARY
+            echo "   \`npm install @ipai/api-client@${{ needs.prepare.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ TypeScript SDK publish failed or skipped" >> $GITHUB_STEP_SUMMARY
+          fi

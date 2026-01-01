@@ -1,0 +1,44 @@
+# GENERATED FILE - DO NOT EDIT MANUALLY
+# Source: docs-to-code-pipeline
+# Generated: 2026-01-01T00:00:00Z
+# Regenerate: make generate-python
+generatorName: python
+outputDir: generated/clients/python
+additionalProperties:
+  packageName: ipai_client
+  projectName: ipai-client
+  packageVersion: 0.1.0
+  packageUrl: https://github.com/Insightpulseai-net/ipai-client-python
+  generateSourceCodeOnly: false
+  useOneOfDiscriminatorLookup: true
+  library: urllib3
+
+# Template customization (optional)
+# templateDir: templates/python-client
+
+# Type mappings
+typeMappings:
+  DateTime: datetime
+
+# Import mappings
+importMappings:
+  datetime: datetime
+
+# Files to preserve during regeneration
+ignoreFileOverride: |
+  .gitignore
+  README.md
+  setup.py
+  CHANGELOG.md
+  .github/
+
+# Global properties
+globalProperties:
+  skipFormModel: false
+
+# Additional model properties
+modelPropertyNaming: snake_case
+
+# Documentation
+apiDocPath: docs/api
+modelDocPath: docs/models

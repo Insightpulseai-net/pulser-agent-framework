@@ -1,0 +1,44 @@
+# GENERATED FILE - DO NOT EDIT MANUALLY
+# Source: docs-to-code-pipeline
+# Generated: 2026-01-01T00:00:00Z
+# Regenerate: Managed by repository template
+version: v2
+managed:
+  enabled: true
+  override:
+    - file_option: go_package_prefix
+      value: github.com/insightpulseai/ipai-proto/gen/go
+
+plugins:
+  # Go protobuf generation
+  - remote: buf.build/protocolbuffers/go
+    out: generated/proto/go
+    opt:
+      - paths=source_relative
+
+  # Go gRPC generation
+  - remote: buf.build/grpc/go
+    out: generated/proto/go
+    opt:
+      - paths=source_relative
+      - require_unimplemented_servers=false
+
+  # Connect-RPC for Go (modern gRPC alternative)
+  - remote: buf.build/connectrpc/go
+    out: generated/proto/go
+    opt:
+      - paths=source_relative
+
+  # Python protobuf generation
+  - remote: buf.build/protocolbuffers/python
+    out: generated/proto/python
+
+  # Python gRPC generation
+  - remote: buf.build/grpc/python
+    out: generated/proto/python
+
+  # TypeScript protobuf (optional)
+  # - remote: buf.build/bufbuild/es
+  #   out: generated/proto/typescript
+  #   opt:
+  #     - target=ts

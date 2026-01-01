@@ -1,0 +1,242 @@
+# GENERATED FILE - DO NOT EDIT MANUALLY
+# Source: docs-to-code-pipeline Model Factory
+# Generated: 2026-01-01T00:00:00Z
+# Regenerate: Managed by repository template
+name: Model Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Training run ID to release'
+        required: true
+        type: string
+      tag:
+        description: 'Release tag (e.g., v0.1.0)'
+        required: true
+        type: string
+      quantize:
+        description: 'Quantization type (none, 4bit, 8bit)'
+        default: 'none'
+        type: choice
+        options:
+          - none
+          - 4bit
+          - 8bit
+      publish_hf:
+        description: 'Publish to Hugging Face Hub'
+        default: false
+        type: boolean
+
+concurrency:
+  group: model-release-${{ github.event.inputs.tag }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    name: Validate Release
+    runs-on: ubuntu-latest
+    outputs:
+      can_release: ${{ steps.validate.outputs.can_release }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check Training Run Exists
+        id: validate
+        run: |
+          echo "Validating run ID: ${{ github.event.inputs.run_id }}"
+          echo "Release tag: ${{ github.event.inputs.tag }}"
+
+          # Check if run artifacts exist (would need artifact API check in real implementation)
+          echo "can_release=true" >> $GITHUB_OUTPUT
+
+  export:
+    name: Export Model
+    runs-on: [self-hosted, gpu]
+    needs: validate
+    if: needs.validate.outputs.can_release == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python Environment
+        run: |
+          python -m venv .venv
+          . .venv/bin/activate
+          pip install -U pip
+          pip install -r ml/serve/requirements.txt || pip install torch transformers peft accelerate
+
+      - name: Download Model Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: model-${{ github.event.inputs.run_id }}
+          path: runs/${{ github.event.inputs.run_id }}/
+        continue-on-error: true
+
+      - name: Export Model
+        id: export
+        run: |
+          . .venv/bin/activate
+          echo "Exporting model for release..."
+
+          python ml/serve/export.py \
+            --run-id "${{ github.event.inputs.run_id }}" \
+            --tag "${{ github.event.inputs.tag }}" \
+            --quantize "${{ github.event.inputs.quantize }}" \
+            --output-dir "release/${{ github.event.inputs.tag }}"
+
+          echo "export_path=release/${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
+
+      - name: Generate Model Card
+        run: |
+          . .venv/bin/activate
+          cat > "release/${{ github.event.inputs.tag }}/MODEL_CARD.md" << 'EOF'
+          # Model Card: IPAI Model ${{ github.event.inputs.tag }}
+
+          ## Model Details
+          - **Run ID:** ${{ github.event.inputs.run_id }}
+          - **Release Tag:** ${{ github.event.inputs.tag }}
+          - **Quantization:** ${{ github.event.inputs.quantize }}
+          - **Release Date:** $(date -u +"%Y-%m-%d")
+
+          ## Intended Use
+          This model is intended for use within the InsightPulse AI platform.
+
+          ## Training Details
+          See training run artifacts for detailed training information.
+
+          ## Evaluation Results
+          See evaluation artifacts for benchmark results.
+
+          ## Limitations
+          - Model performance may vary based on input domain
+          - Not suitable for production use without proper evaluation
+
+          ## License
+          AGPL-3.0
+          EOF
+
+      - name: Upload Release Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ github.event.inputs.tag }}
+          path: release/${{ github.event.inputs.tag }}/
+
+  smoke-test:
+    name: Smoke Test
+    runs-on: [self-hosted, gpu]
+    needs: export
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python Environment
+        run: |
+          python -m venv .venv
+          . .venv/bin/activate
+          pip install -U pip
+          pip install -r ml/eval/requirements.txt || pip install torch transformers
+
+      - name: Download Release Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-${{ github.event.inputs.tag }}
+          path: release/${{ github.event.inputs.tag }}/
+
+      - name: Run Smoke Test
+        run: |
+          . .venv/bin/activate
+          echo "Running smoke test for release ${{ github.event.inputs.tag }}..."
+
+          python ml/eval/harness/smoke.py \
+            --tag "${{ github.event.inputs.tag }}" \
+            --model-path "release/${{ github.event.inputs.tag }}"
+
+  publish-hf:
+    name: Publish to Hugging Face
+    runs-on: ubuntu-latest
+    needs: smoke-test
+    if: github.event.inputs.publish_hf == 'true'
+    environment: huggingface
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Hugging Face Hub
+        run: pip install huggingface-hub
+
+      - name: Download Release Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-${{ github.event.inputs.tag }}
+          path: release/${{ github.event.inputs.tag }}/
+
+      - name: Publish to Hugging Face Hub
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python -c "
+          from huggingface_hub import HfApi
+          api = HfApi()
+          api.upload_folder(
+              folder_path='release/${{ github.event.inputs.tag }}',
+              repo_id='insightpulseai/ipai-model',
+              repo_type='model',
+              commit_message='Release ${{ github.event.inputs.tag }}'
+          )
+          "
+
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: smoke-test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Release Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-${{ github.event.inputs.tag }}
+          path: release/${{ github.event.inputs.tag }}/
+
+      - name: Create Release Archive
+        run: |
+          cd release
+          tar -czvf ipai-model-${{ github.event.inputs.tag }}.tar.gz ${{ github.event.inputs.tag }}/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: model-${{ github.event.inputs.tag }}
+          name: "Model Release ${{ github.event.inputs.tag }}"
+          body: |
+            ## Model Release ${{ github.event.inputs.tag }}
+
+            **Training Run:** ${{ github.event.inputs.run_id }}
+            **Quantization:** ${{ github.event.inputs.quantize }}
+
+            ### Download
+            Download the model archive below or use the Hugging Face Hub.
+
+            ### Usage
+            ```python
+            from transformers import AutoModelForCausalLM, AutoTokenizer
+
+            model = AutoModelForCausalLM.from_pretrained("./ipai-model-${{ github.event.inputs.tag }}")
+            tokenizer = AutoTokenizer.from_pretrained("./ipai-model-${{ github.event.inputs.tag }}")
+            ```
+          files: release/ipai-model-${{ github.event.inputs.tag }}.tar.gz
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

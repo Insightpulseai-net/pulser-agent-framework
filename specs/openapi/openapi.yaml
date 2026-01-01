@@ -1,0 +1,320 @@
+# GENERATED FILE - DO NOT EDIT MANUALLY
+# Source: InsightPulse AI Platform API
+# Generated: 2026-01-01T00:00:00Z
+# Regenerate: make generate-spec
+openapi: 3.1.0
+info:
+  title: InsightPulse AI Platform API
+  description: |
+    Unified API for InsightPulse AI Platform services including:
+    - Document processing and ingestion
+    - Code generation from specifications
+    - Agent orchestration
+    - Knowledge base management
+  version: 1.0.0
+  contact:
+    name: InsightPulse AI
+    url: https://insightpulseai.net
+    email: api@insightpulseai.net
+  license:
+    name: AGPL-3.0
+    url: https://www.gnu.org/licenses/agpl-3.0.html
+
+servers:
+  - url: https://api.insightpulseai.net/v1
+    description: Production server
+  - url: https://staging-api.insightpulseai.net/v1
+    description: Staging server
+  - url: http://localhost:8000/v1
+    description: Local development
+
+tags:
+  - name: documents
+    description: Document ingestion and processing
+  - name: artifacts
+    description: Artifact management and routing
+  - name: codegen
+    description: Code generation from specs
+  - name: agents
+    description: Agent orchestration
+  - name: knowledge
+    description: Knowledge base operations
+
+paths:
+  /documents:
+    get:
+      operationId: listDocuments
+      summary: List all documents
+      tags: [documents]
+      parameters:
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/PageToken'
+        - $ref: '#/components/parameters/Filter'
+      responses:
+        '200':
+          description: List of documents
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    post:
+      operationId: createDocument
+      summary: Upload a new document
+      tags: [documents]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Document file to upload
+                metadata:
+                  type: string
+                  format: json
+                  description: JSON metadata for the document
+      responses:
+        '201':
+          description: Document created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /documents/{documentId}:
+    get:
+      operationId: getDocument
+      summary: Get document by ID
+      tags: [documents]
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200':
+          description: Document details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /artifacts:
+    get:
+      operationId: listArtifacts
+      summary: List all artifacts
+      tags: [artifacts]
+      parameters:
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/PageToken'
+        - name: artifact_type
+          in: query
+          schema:
+            $ref: '#/components/schemas/ArtifactType'
+      responses:
+        '200':
+          description: List of artifacts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArtifactList'
+
+    post:
+      operationId: ingestArtifact
+      summary: Ingest a new artifact with envelope
+      tags: [artifacts]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArtifactEnvelope'
+      responses:
+        '201':
+          description: Artifact ingested and routed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArtifactIngestResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          description: Invalid envelope - missing required fields
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeValidationError'
+
+  /artifacts/{artifactId}:
+    get:
+      operationId: getArtifact
+      summary: Get artifact by ID
+      tags: [artifacts]
+      parameters:
+        - name: artifactId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Artifact details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Artifact'
+
+  /codegen/generate:
+    post:
+      operationId: generateCode
+      summary: Generate code from specification
+      tags: [codegen]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CodegenRequest'
+      responses:
+        '200':
+          description: Generated code
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CodegenResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /codegen/validate:
+    post:
+      operationId: validateSpec
+      summary: Validate a specification
+      tags: [codegen]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidateSpecRequest'
+      responses:
+        '200':
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationResult'
+
+  /agents:
+    get:
+      operationId: listAgents
+      summary: List available agents
+      tags: [agents]
+      responses:
+        '200':
+          description: List of agents
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentList'
+
+  /agents/{agentId}/run:
+    post:
+      operationId: runAgent
+      summary: Execute an agent with given input
+      tags: [agents]
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentRunRequest'
+      responses:
+        '200':
+          description: Agent execution result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentRunResponse'
+
+  /knowledge/search:
+    post:
+      operationId: searchKnowledge
+      summary: Search the knowledge base
+      tags: [knowledge]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KnowledgeSearchRequest'
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KnowledgeSearchResponse'
+
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Health check endpoint
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [healthy, degraded, unhealthy]
+                  version:
+                    type: string
+                  timestamp:
+                    type: string
+                    format: date-time
+
+components:
+  schemas:
+    $ref: './components/schemas.yaml#/components/schemas'
+
+  parameters:
+    $ref: './components/parameters.yaml#/components/parameters'
+
+  responses:
+    $ref: './components/responses.yaml#/components/responses'
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+security:
+  - BearerAuth: []
+  - ApiKeyAuth: []
