@@ -1,0 +1,10 @@
+{
+  "question": "Generate an Odoo module for tracking BIR compliance rules",
+  "context": {
+    "module_name": "ipai_bir_compliance",
+    "target_system": "odoo18",
+    "compliance_requirements": ["BIR_1700", "BIR_1601C", "BIR_2550Q"]
+  },
+  "created_at": "2026-01-01T00:00:00Z",
+  "created_by": "eval-system"
+}

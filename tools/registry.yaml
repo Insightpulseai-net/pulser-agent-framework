@@ -1,0 +1,483 @@
+# Tool Contracts Registry
+# Defines IO schemas and guarantees for all docs2code pipeline tools.
+# Every generator step behaves like a "real API" with strict contracts.
+
+version: "1.0.0"
+description: "Docs2Code Pipeline Tool Contracts"
+
+# Pipeline stages and their tools
+stages:
+  - name: ingest
+    description: "Pull and normalize documentation sources"
+    tools:
+      - compile_docir
+
+  - name: generate
+    description: "Generate code from DocIR"
+    tools:
+      - gen.odoo.module
+      - gen.sql.migrations
+      - gen.python.models
+      - gen.xml.views
+      - gen.tests.unit
+      - gen.tests.integration
+
+  - name: verify
+    description: "Validate generated code"
+    tools:
+      - verify.lint
+      - verify.typecheck
+      - verify.tests
+      - verify.compliance
+
+tools:
+  # ============================================================================
+  # INGEST STAGE
+  # ============================================================================
+
+  compile_docir:
+    name: "DocIR Compiler"
+    description: "Compile documentation sources into deterministic DocIR"
+    input_schema: "schemas/CompileDocIRInput.json"
+    output_schema: "schemas/DocIR.schema.json"
+    guarantees:
+      deterministic: true
+      idempotent: true
+      patch_mode: false
+    io:
+      input:
+        source_dir:
+          type: string
+          description: "Path to directory containing source documents"
+          required: true
+        doc_id:
+          type: string
+          description: "Unique identifier for the document set"
+          default: "default"
+      output:
+        docir:
+          type: object
+          description: "Compiled DocIR object"
+          schema_ref: "#/schemas/DocIR"
+        source_count:
+          type: integer
+          description: "Number of sources processed"
+        requirement_count:
+          type: integer
+          description: "Number of requirements extracted"
+    validation:
+      - "output.docir must validate against DocIR.schema.json"
+      - "output.requirement_count > 0"
+    performance:
+      max_duration_seconds: 60
+      max_memory_mb: 512
+
+  # ============================================================================
+  # GENERATE STAGE
+  # ============================================================================
+
+  gen.odoo.module:
+    name: "Odoo Module Generator"
+    description: "Generate complete Odoo 18 CE module from DocIR"
+    input_schema: "schemas/GenOdooModuleInput.json"
+    output_schema: "schemas/GenOdooModuleOutput.json"
+    guarantees:
+      deterministic: true
+      idempotent: true
+      patch_mode: true
+    io:
+      input:
+        docir:
+          type: object
+          description: "Compiled DocIR"
+          schema_ref: "#/schemas/DocIR"
+          required: true
+        module_name:
+          type: string
+          description: "Target module name"
+          required: true
+        output_dir:
+          type: string
+          description: "Output directory for generated module"
+          required: true
+        mode:
+          type: string
+          enum: ["full", "patch"]
+          default: "patch"
+          description: "Generation mode (full rewrite or patch)"
+      output:
+        files:
+          type: array
+          description: "List of generated file paths"
+          items:
+            type: object
+            properties:
+              path: { type: string }
+              action: { type: string, enum: ["created", "modified", "unchanged"] }
+              lines: { type: integer }
+        rule_compliance:
+          type: object
+          description: "80/15/5 rule compliance report"
+          properties:
+            native_odoo_percent: { type: number }
+            oca_modules_percent: { type: number }
+            custom_code_percent: { type: number }
+            is_compliant: { type: boolean }
+        generation_id:
+          type: string
+          description: "Unique ID for this generation"
+    validation:
+      - "output.rule_compliance.is_compliant == true"
+      - "output.rule_compliance.native_odoo_percent >= 80"
+      - "output.rule_compliance.custom_code_percent <= 5"
+    performance:
+      max_duration_seconds: 120
+      max_memory_mb: 1024
+
+  gen.sql.migrations:
+    name: "SQL Migration Generator"
+    description: "Generate SQL migrations from DocIR schemas"
+    input_schema: "schemas/GenSQLMigrationsInput.json"
+    output_schema: "schemas/MigrationBundle.json"
+    guarantees:
+      deterministic: true
+      idempotent: true
+      patch_mode: true
+    io:
+      input:
+        docir:
+          type: object
+          description: "Compiled DocIR with schemas"
+          required: true
+        target:
+          type: string
+          enum: ["supabase", "postgres", "odoo"]
+          default: "supabase"
+        output_dir:
+          type: string
+          required: true
+      output:
+        migrations:
+          type: array
+          items:
+            type: object
+            properties:
+              version: { type: string }
+              name: { type: string }
+              up_sql: { type: string }
+              down_sql: { type: string }
+        rls_policies:
+          type: array
+          description: "Row-level security policies (Supabase)"
+        indexes:
+          type: array
+          description: "Recommended indexes"
+    validation:
+      - "all migrations must be syntactically valid SQL"
+      - "down_sql must reverse up_sql"
+    performance:
+      max_duration_seconds: 30
+      max_memory_mb: 256
+
+  gen.python.models:
+    name: "Python Model Generator"
+    description: "Generate typed Python ORM models from DocIR"
+    input_schema: "schemas/GenPythonModelsInput.json"
+    output_schema: "schemas/GenPythonModelsOutput.json"
+    guarantees:
+      deterministic: true
+      idempotent: true
+      patch_mode: true
+    io:
+      input:
+        docir:
+          type: object
+          required: true
+        framework:
+          type: string
+          enum: ["odoo", "sqlalchemy", "pydantic"]
+          default: "odoo"
+        output_dir:
+          type: string
+          required: true
+      output:
+        models:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              file_path: { type: string }
+              fields: { type: array }
+              methods: { type: array }
+        imports:
+          type: array
+          description: "Required imports"
+    validation:
+      - "all models must pass mypy type checking"
+      - "all models must have docstrings"
+    performance:
+      max_duration_seconds: 60
+      max_memory_mb: 256
+
+  gen.xml.views:
+    name: "XML View Generator"
+    description: "Generate Odoo XML views from DocIR"
+    input_schema: "schemas/GenXMLViewsInput.json"
+    output_schema: "schemas/GenXMLViewsOutput.json"
+    guarantees:
+      deterministic: true
+      idempotent: true
+      patch_mode: true
+    io:
+      input:
+        docir:
+          type: object
+          required: true
+        output_dir:
+          type: string
+          required: true
+      output:
+        views:
+          type: array
+          items:
+            type: object
+            properties:
+              model: { type: string }
+              view_type: { type: string, enum: ["tree", "form", "kanban", "search"] }
+              file_path: { type: string }
+    validation:
+      - "all XML must be well-formed"
+      - "view IDs must be unique"
+    performance:
+      max_duration_seconds: 30
+      max_memory_mb: 256
+
+  gen.tests.unit:
+    name: "Unit Test Generator"
+    description: "Generate unit tests from DocIR acceptance criteria"
+    input_schema: "schemas/GenTestsInput.json"
+    output_schema: "schemas/GenTestsOutput.json"
+    guarantees:
+      deterministic: true
+      idempotent: true
+      patch_mode: true
+    io:
+      input:
+        docir:
+          type: object
+          required: true
+        framework:
+          type: string
+          enum: ["pytest", "odoo", "unittest"]
+          default: "pytest"
+        output_dir:
+          type: string
+          required: true
+      output:
+        test_files:
+          type: array
+          items:
+            type: object
+            properties:
+              file_path: { type: string }
+              test_count: { type: integer }
+              requirement_refs: { type: array }
+        coverage_estimate:
+          type: number
+          description: "Estimated coverage percentage"
+    validation:
+      - "coverage_estimate >= 90"
+      - "each requirement must have at least one test"
+    performance:
+      max_duration_seconds: 60
+      max_memory_mb: 256
+
+  gen.tests.integration:
+    name: "Integration Test Generator"
+    description: "Generate integration tests from DocIR interfaces"
+    input_schema: "schemas/GenTestsInput.json"
+    output_schema: "schemas/GenTestsOutput.json"
+    guarantees:
+      deterministic: true
+      idempotent: true
+      patch_mode: true
+    io:
+      input:
+        docir:
+          type: object
+          required: true
+        framework:
+          type: string
+          enum: ["pytest", "playwright"]
+          default: "pytest"
+        output_dir:
+          type: string
+          required: true
+      output:
+        test_files:
+          type: array
+        coverage_estimate:
+          type: number
+    validation:
+      - "coverage_estimate >= 80"
+    performance:
+      max_duration_seconds: 60
+      max_memory_mb: 256
+
+  # ============================================================================
+  # VERIFY STAGE
+  # ============================================================================
+
+  verify.lint:
+    name: "Linter"
+    description: "Run linting on generated code"
+    input_schema: "schemas/VerifyInput.json"
+    output_schema: "schemas/VerifyOutput.json"
+    guarantees:
+      deterministic: true
+      idempotent: true
+      patch_mode: false
+    io:
+      input:
+        paths:
+          type: array
+          items: { type: string }
+          required: true
+        languages:
+          type: array
+          items: { type: string, enum: ["python", "xml", "yaml", "json"] }
+      output:
+        passed: { type: boolean }
+        errors: { type: array }
+        warnings: { type: array }
+    validation:
+      - "output.passed == true OR output.errors contains only allowed exceptions"
+    performance:
+      max_duration_seconds: 60
+      max_memory_mb: 256
+
+  verify.typecheck:
+    name: "Type Checker"
+    description: "Run type checking on generated Python code"
+    input_schema: "schemas/VerifyInput.json"
+    output_schema: "schemas/VerifyOutput.json"
+    guarantees:
+      deterministic: true
+      idempotent: true
+      patch_mode: false
+    io:
+      input:
+        paths:
+          type: array
+          items: { type: string }
+          required: true
+      output:
+        passed: { type: boolean }
+        errors: { type: array }
+    validation:
+      - "output.passed == true"
+    performance:
+      max_duration_seconds: 120
+      max_memory_mb: 512
+
+  verify.tests:
+    name: "Test Runner"
+    description: "Run generated tests"
+    input_schema: "schemas/VerifyTestsInput.json"
+    output_schema: "schemas/VerifyTestsOutput.json"
+    guarantees:
+      deterministic: false  # Tests may have randomness
+      idempotent: true
+      patch_mode: false
+    io:
+      input:
+        test_paths:
+          type: array
+          items: { type: string }
+          required: true
+        markers:
+          type: array
+          items: { type: string }
+          description: "pytest markers to filter tests"
+      output:
+        passed: { type: boolean }
+        total: { type: integer }
+        passed_count: { type: integer }
+        failed_count: { type: integer }
+        skipped_count: { type: integer }
+        coverage:
+          type: object
+          properties:
+            line_rate: { type: number }
+            branch_rate: { type: number }
+        failures:
+          type: array
+    validation:
+      - "output.passed == true"
+      - "output.coverage.line_rate >= 0.90"
+    performance:
+      max_duration_seconds: 300
+      max_memory_mb: 1024
+
+  verify.compliance:
+    name: "Compliance Verifier"
+    description: "Verify generated code against compliance rules"
+    input_schema: "schemas/VerifyComplianceInput.json"
+    output_schema: "schemas/VerifyComplianceOutput.json"
+    guarantees:
+      deterministic: true
+      idempotent: true
+      patch_mode: false
+    io:
+      input:
+        docir:
+          type: object
+          required: true
+        code_paths:
+          type: array
+          items: { type: string }
+          required: true
+      output:
+        passed: { type: boolean }
+        rules_checked: { type: integer }
+        rules_passed: { type: integer }
+        violations:
+          type: array
+          items:
+            type: object
+            properties:
+              rule_id: { type: string }
+              file_path: { type: string }
+              line: { type: integer }
+              message: { type: string }
+              severity: { type: string, enum: ["error", "warning"] }
+    validation:
+      - "output.passed == true"
+      - "no violations with severity == 'error'"
+    performance:
+      max_duration_seconds: 60
+      max_memory_mb: 256
+
+# Schema references (for validation)
+schemas:
+  DocIR:
+    $ref: "schemas/DocIR.schema.json"
+
+# Eval configuration
+eval:
+  snapshot_sources:
+    - prod_observability_bundle
+    - regression_test_cases
+  judge_model:
+    name: "gpt-5.2"
+    scoring_dimensions:
+      - accuracy
+      - helpfulness
+      - actionability
+      - safety
+  thresholds:
+    accuracy: 0.85
+    helpfulness: 0.80
+    actionability: 0.75
+    safety: 1.00
