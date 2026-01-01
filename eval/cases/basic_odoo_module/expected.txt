@@ -1,0 +1,4 @@
+Compiled DocIR from sources.
+Generated Odoo module with 2 requirements.
+Lint check passed.
+Type check passed.

@@ -1,0 +1,127 @@
+{
+  "doc_id": "bir-compliance-demo",
+  "version": "2026-01-01",
+  "sources": [
+    {
+      "uri": "file://docs/bir_compliance.md",
+      "hash": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source_type": "bir_regulatory",
+      "extracted_at": "2026-01-01T00:00:00Z",
+      "extraction_confidence": 0.95
+    }
+  ],
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "title": "BIR Tax Form Compliance Tracking",
+      "priority": "P0",
+      "description": "Track compliance status for BIR tax forms including 1700, 1601-C, and 2550-Q",
+      "source_spans": [
+        {
+          "uri": "file://docs/bir_compliance.md",
+          "start": 0,
+          "end": 500,
+          "heading": "BIR Compliance Requirements"
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "AC-001a",
+          "type": "unit",
+          "assert": "compliance.rule model exists with required fields"
+        },
+        {
+          "id": "AC-001b",
+          "type": "integration",
+          "assert": "CRUD operations work for compliance rules"
+        },
+        {
+          "id": "AC-001c",
+          "type": "e2e",
+          "assert": "Users can view and manage compliance rules in Odoo UI"
+        }
+      ],
+      "compliance_refs": ["BIR_1700", "BIR_1601C", "BIR_2550Q"],
+      "interfaces": [
+        {
+          "kind": "model",
+          "model_name": "compliance.rule"
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "title": "Due Date Tracking",
+      "priority": "P1",
+      "description": "Track due dates for each compliance requirement with automatic reminders",
+      "source_spans": [
+        {
+          "uri": "file://docs/bir_compliance.md",
+          "start": 500,
+          "end": 800
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "AC-002a",
+          "type": "unit",
+          "assert": "due_date field exists on compliance.rule model"
+        },
+        {
+          "id": "AC-002b",
+          "type": "integration",
+          "assert": "Overdue rules are flagged automatically"
+        }
+      ]
+    }
+  ],
+  "schemas": {
+    "ComplianceRule": {
+      "type": "object",
+      "properties": {
+        "name": {"type": "string"},
+        "regulation_code": {"type": "string"},
+        "due_date": {"type": "string", "format": "date"},
+        "status": {"type": "string", "enum": ["pending", "in_progress", "completed", "overdue"]},
+        "is_active": {"type": "boolean"}
+      },
+      "required": ["name", "regulation_code"]
+    }
+  },
+  "compliance_rules": [
+    {
+      "id": "BIR_1700",
+      "regulation": "BIR",
+      "rule_type": "tax_form",
+      "description": "Annual Income Tax Return for Individuals"
+    },
+    {
+      "id": "BIR_1601C",
+      "regulation": "BIR",
+      "rule_type": "tax_form",
+      "description": "Monthly Remittance Return of Income Taxes Withheld on Compensation"
+    },
+    {
+      "id": "BIR_2550Q",
+      "regulation": "BIR",
+      "rule_type": "tax_form",
+      "description": "Quarterly Value-Added Tax Return"
+    }
+  ],
+  "module_map": {
+    "ipai_bir_compliance": {
+      "module_name": "ipai_bir_compliance",
+      "display_name": "BIR Compliance Tracker",
+      "category": "native_odoo",
+      "depends": ["base", "account"],
+      "models": ["compliance.rule"],
+      "requirement_refs": ["REQ-001", "REQ-002"]
+    }
+  },
+  "metadata": {
+    "created_at": "2026-01-01T00:00:00Z",
+    "pipeline_version": "1.0.0",
+    "target_system": "odoo18",
+    "compliance_validated": true
+  }
+}

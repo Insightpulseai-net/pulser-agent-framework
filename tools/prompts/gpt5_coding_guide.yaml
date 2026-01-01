@@ -1,0 +1,218 @@
+# GPT-5 Coding Prompts Guide
+# Based on OpenAI Cookbook GPT-5 Prompting Guide best practices
+#
+# Reference:
+# - GPT-5 prompting guide (Aug 7, 2025): agentic workflow predictability,
+#   maximizing coding performance, instruction-following patterns
+# - GPT-5.2 Prompting Guide (Dec 11, 2025): migration, prompt structure,
+#   verbosity constraints, reasoning settings guidance
+
+version: "1.0.0"
+description: "Prompt templates for GPT-5 family models in coding workflows"
+
+# Model recommendations for different tasks
+models:
+  default_coding: "gpt-5.2"
+  complex_problems: "gpt-5.2-pro"
+  fast_simple: "gpt-5-mini"
+  high_throughput: "gpt-5-nano"
+  agentic_coding: "gpt-5.2-codex"
+  long_horizon_agentic: "gpt-5.1-codex-max"
+
+# API configuration (Responses API recommended)
+api_config:
+  # Reasoning effort levels
+  reasoning:
+    none: "No chain-of-thought, fastest response"
+    medium: "Balanced reasoning for most coding tasks"
+    high: "Deep reasoning for complex problems"
+    xhigh: "Extended reasoning (supported on some models)"
+
+  # Verbosity control (GPT-5 specific)
+  verbosity:
+    low: "Concise output, code-focused"
+    medium: "Balanced explanation and code"
+    high: "Detailed explanation with code"
+
+# Prompt templates for docs2code pipeline
+templates:
+  # System prompts
+  system:
+    code_generator: |
+      You are a senior software engineer specializing in Odoo 18 CE development.
+      You generate production-ready code following these principles:
+
+      1. 80/15/5 Rule: 80% native Odoo, 15% OCA modules, 5% custom code
+      2. Type Safety: All Python code must include type hints
+      3. Test Coverage: Generate tests targeting ≥90% coverage
+      4. Compliance: All code must satisfy regulatory requirements (BIR, PFRS, DOLE)
+
+      Output format: Production-ready code with minimal comments.
+      Do not explain unless asked. Focus on correctness and maintainability.
+
+    compliance_validator: |
+      You are a regulatory compliance expert for Philippine business systems.
+
+      Your role:
+      1. Validate code against BIR tax form requirements (1700, 1601-C, 2550-Q, etc.)
+      2. Ensure PFRS/PAS accounting standards compliance
+      3. Verify DOLE labor law requirements
+      4. Check SOX Section 404 controls where applicable
+
+      Output format: Structured compliance report with pass/fail status per rule.
+      Include remediation guidance for any failures.
+
+    test_generator: |
+      You are a senior QA engineer generating comprehensive test suites.
+
+      Requirements:
+      1. Generate unit tests for all public methods
+      2. Include integration tests for API endpoints
+      3. Add edge case coverage
+      4. Follow pytest conventions for Python, Odoo TransactionCase for Odoo
+
+      Target coverage: ≥90% for unit tests, ≥80% for integration tests.
+
+  # Task prompts
+  tasks:
+    generate_odoo_module: |
+      Generate a complete Odoo 18 CE module with the following:
+
+      Module: {module_name}
+      Description: {description}
+      Models: {models}
+
+      Requirements:
+      {requirements}
+
+      Compliance References:
+      {compliance_refs}
+
+      Generate:
+      1. __manifest__.py with correct dependencies
+      2. models/*.py with typed fields and computed fields
+      3. views/*.xml with form, tree, and search views
+      4. security/ir.model.access.csv with proper ACLs
+      5. tests/test_*.py with comprehensive test coverage
+
+    generate_migration: |
+      Generate SQL migrations for the following schema changes:
+
+      Target: {target_database}
+      Changes:
+      {schema_changes}
+
+      Requirements:
+      1. Generate both UP and DOWN migrations
+      2. Include RLS policies for Supabase
+      3. Add appropriate indexes
+      4. Handle data migration if needed
+
+      Format: SQL with comments explaining each step.
+
+    review_code: |
+      Review the following code for:
+
+      1. Security vulnerabilities (OWASP Top 10)
+      2. Performance issues
+      3. Compliance with coding standards
+      4. Test coverage gaps
+      5. 80/15/5 rule compliance for Odoo code
+
+      Code:
+      ```{language}
+      {code}
+      ```
+
+      Provide specific, actionable feedback with line numbers.
+
+# Agentic workflow patterns (from GPT-5 prompting guide)
+agentic_patterns:
+  # Tool use predictability
+  tool_use:
+    description: "Patterns for predictable tool invocation in agentic workflows"
+    principles:
+      - "Define explicit tool contracts with JSON schema input/output"
+      - "Use deterministic mode (no creativity) for code generation tools"
+      - "Ensure idempotency for all generation tools"
+      - "Prefer patch mode over full rewrite for incremental changes"
+
+  # Multi-step workflows
+  orchestration:
+    description: "Patterns for multi-agent orchestration"
+    principles:
+      - "Chain agents with explicit handoffs: Parser → Validator → Generator → Tester"
+      - "Each agent has strict SKILL boundaries (what it CAN and CANNOT do)"
+      - "All decisions are logged for audit"
+      - "Rollback capability at each stage"
+
+  # Eval-driven development
+  evaluation:
+    description: "Patterns for evaluation-driven prompt development"
+    principles:
+      - "Snapshot production state for replay testing"
+      - "Use judge model for scoring non-deterministic outputs"
+      - "Define thresholds for accuracy, helpfulness, actionability, safety"
+      - "Block deployment on regression"
+
+# Verbosity and reasoning presets for different tasks
+presets:
+  fast_codegen:
+    model: "gpt-5.2"
+    reasoning: "medium"
+    verbosity: "low"
+    description: "Fast code generation with balanced reasoning"
+
+  deep_analysis:
+    model: "gpt-5.2-pro"
+    reasoning: "high"
+    verbosity: "medium"
+    description: "Deep analysis for complex problems"
+
+  batch_processing:
+    model: "gpt-5-mini"
+    reasoning: "none"
+    verbosity: "low"
+    description: "High-throughput batch processing"
+
+  agentic_coding:
+    model: "gpt-5.2-codex"
+    reasoning: "medium"
+    verbosity: "low"
+    description: "Agentic coding workflows with tool use"
+
+# Example API usage (Node/TS)
+examples:
+  nodejs: |
+    import OpenAI from "openai";
+
+    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+    const resp = await client.responses.create({
+      model: "gpt-5.2",
+      reasoning: { effort: "medium" },
+      verbosity: "low",
+      input: [
+        { role: "system", content: systemPrompts.codeGenerator },
+        { role: "user", content: taskPrompt }
+      ],
+    });
+
+    console.log(resp.output_text);
+
+  python: |
+    from openai import OpenAI
+
+    client = OpenAI()
+
+    resp = client.responses.create(
+        model="gpt-5.2",
+        reasoning={"effort": "medium"},
+        verbosity="low",
+        input=[
+            {"role": "system", "content": system_prompts["code_generator"]},
+            {"role": "user", "content": task_prompt},
+        ],
+    )
+
+    print(resp.output_text)

@@ -1,0 +1,86 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "BIR 2307 Withholding Tax Certificates",
+  "description": "Withholding tax certificate tracking for BIR Form 2307 compliance. Tracks creditable withholding tax at source (CWTS) for income payments subject to expanded/creditable withholding taxes.",
+  "x_ipai_depends": ["base", "account"],
+  "properties": {
+    "vendor_id": {
+      "type": "string",
+      "title": "Vendor TIN",
+      "description": "Tax Identification Number of the vendor/payee"
+    },
+    "vendor_name": {
+      "type": "string",
+      "title": "Vendor Name",
+      "description": "Registered name of the vendor/payee"
+    },
+    "invoice_number": {
+      "type": "string",
+      "title": "Invoice Number",
+      "description": "Reference invoice or payment document number"
+    },
+    "invoice_date": {
+      "type": "string",
+      "format": "date",
+      "title": "Invoice Date",
+      "description": "Date of the invoice or payment"
+    },
+    "atc_code": {
+      "type": "string",
+      "title": "ATC Code",
+      "description": "Alphanumeric Tax Code per BIR regulations"
+    },
+    "tax_rate": {
+      "type": "number",
+      "title": "Tax Rate (%)",
+      "description": "Withholding tax rate percentage"
+    },
+    "gross_amount": {
+      "type": "number",
+      "title": "Gross Amount",
+      "description": "Gross payment amount before withholding"
+    },
+    "tax_withheld": {
+      "type": "number",
+      "title": "Tax Withheld",
+      "description": "Amount of tax withheld"
+    },
+    "net_amount": {
+      "type": "number",
+      "title": "Net Amount",
+      "description": "Net payment after withholding (gross - tax_withheld)"
+    },
+    "period_from": {
+      "type": "string",
+      "format": "date",
+      "title": "Period From",
+      "description": "Start of the tax period covered"
+    },
+    "period_to": {
+      "type": "string",
+      "format": "date",
+      "title": "Period To",
+      "description": "End of the tax period covered"
+    },
+    "is_issued": {
+      "type": "boolean",
+      "title": "Certificate Issued",
+      "description": "Whether the 2307 certificate has been issued to the vendor"
+    },
+    "issue_date": {
+      "type": "string",
+      "format": "date",
+      "title": "Issue Date",
+      "description": "Date the certificate was issued"
+    }
+  },
+  "required": [
+    "vendor_id",
+    "vendor_name",
+    "invoice_date",
+    "atc_code",
+    "gross_amount",
+    "tax_withheld"
+  ]
+}

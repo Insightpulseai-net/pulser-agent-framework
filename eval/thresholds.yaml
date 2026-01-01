@@ -1,0 +1,82 @@
+# Evaluation Thresholds Configuration
+# Defines minimum scores for CI gates
+
+version: "1.0.0"
+description: "Docs2Code Pipeline Evaluation Thresholds"
+
+# Score thresholds (0.0 - 1.0)
+thresholds:
+  # Accuracy: How well does the output match expected/correct output
+  accuracy: 0.85
+
+  # Helpfulness: Is the output useful and well-structured
+  helpfulness: 0.80
+
+  # Actionability: Does the output provide concrete, usable artifacts
+  actionability: 0.75
+
+  # Safety: Does the output avoid harmful patterns (must be 1.0 in production)
+  safety: 1.00
+
+# CI gate configuration
+ci_gates:
+  # Hard gates - must pass for CI to succeed
+  hard:
+    - accuracy
+    - safety
+
+  # Soft gates - warnings only, don't fail CI
+  soft:
+    - helpfulness
+    - actionability
+
+# Pass rate requirements
+pass_rate:
+  minimum: 0.90  # At least 90% of cases must pass
+
+# Regression detection
+regression:
+  enabled: true
+  baseline_path: "eval/baseline.json"
+  max_regression: 0.05  # Max 5% decrease allowed
+
+# Judge model configuration
+judge:
+  model: "gpt-5.2"
+  fallback: "rule-based"
+  timeout_seconds: 30
+  retry_count: 3
+
+# Scoring dimensions with weights
+scoring:
+  accuracy:
+    weight: 0.40
+    description: "Correctness of generated output"
+    components:
+      - required_outputs_present
+      - schema_validation
+      - expected_match
+
+  helpfulness:
+    weight: 0.25
+    description: "Clarity and usefulness of output"
+    components:
+      - structure
+      - explanation_quality
+      - completeness
+
+  actionability:
+    weight: 0.25
+    description: "Concreteness and usability"
+    components:
+      - code_quality
+      - file_outputs
+      - test_coverage
+
+  safety:
+    weight: 0.10
+    description: "Absence of harmful patterns"
+    components:
+      - no_secrets
+      - no_vulnerabilities
+      - compliance_verified

@@ -1,0 +1,49 @@
+# Evaluation Rubric for Basic Odoo Module Generation
+
+dimensions:
+  accuracy:
+    weight: 0.40
+    criteria:
+      - "Generated module follows Odoo 18 CE conventions"
+      - "All required files are created"
+      - "Model fields match DocIR schema"
+      - "Security rules are properly defined"
+
+  helpfulness:
+    weight: 0.25
+    criteria:
+      - "Clear module documentation in __manifest__.py"
+      - "Docstrings in Python files"
+      - "Logical file organization"
+
+  actionability:
+    weight: 0.25
+    criteria:
+      - "Module can be installed in Odoo"
+      - "Tests are runnable"
+      - "No syntax errors"
+
+  safety:
+    weight: 0.10
+    criteria:
+      - "No hardcoded secrets"
+      - "Proper SQL escaping if raw SQL used"
+      - "RLS policies considered"
+
+required_outputs:
+  - "__manifest__.py"
+  - "models/"
+  - "security/ir.model.access.csv"
+  - "tests/"
+  - "compliance.rule model"
+  - "BIR_1700"
+  - "BIR_1601C"
+  - "BIR_2550Q"
+
+forbidden_outputs:
+  - "password"
+  - "api_key"
+  - "secret"
+  - "DROP TABLE"
+  - "eval("
+  - "exec("

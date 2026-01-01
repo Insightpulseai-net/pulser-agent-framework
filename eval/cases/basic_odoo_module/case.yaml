@@ -1,0 +1,27 @@
+# Evaluation Case: Basic Odoo Module Generation
+# Tests the docs2code pipeline's ability to generate a simple Odoo module
+
+id: basic_odoo_module
+name: Basic Odoo Module Generation
+description: |
+  Generate a basic Odoo 18 CE module with compliance rule tracking.
+  This tests the end-to-end pipeline from DocIR to working module.
+
+tags:
+  - smoke
+  - odoo
+  - critical
+  - regression
+
+expected_outputs:
+  - "__manifest__.py"
+  - "models/compliance_rule.py"
+  - "security/ir.model.access.csv"
+  - "tests/test_compliance_rule.py"
+
+quality_requirements:
+  rule_compliance:
+    native_odoo_percent: 80
+    oca_modules_percent: 15
+    custom_code_percent: 5
+  test_coverage: 90
