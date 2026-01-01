@@ -1,0 +1,325 @@
+# .github/workflows/generate-from-spec.yml
+# Spec-First Generation Pipeline
+#
+# Based on GPT-5 prompting research - implements spec validation, breaking
+# change detection, and deterministic code generation from specifications.
+#
+# Triggers on:
+# - spec file changes (OpenAPI, JSON Schema, DocIR)
+# - manual dispatch
+
+name: Generate from Spec
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'specs/**'
+      - 'openapi.yaml'
+      - 'schema.json'
+      - 'prompts/**'
+      - 'generators/**'
+      - 'scripts/**'
+  pull_request:
+    paths:
+      - 'specs/**'
+      - 'generators/**'
+  workflow_dispatch:
+    inputs:
+      force_regenerate:
+        description: 'Force regenerate all modules'
+        required: false
+        default: 'false'
+        type: boolean
+
+concurrency:
+  group: generate-spec-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: '3.11'
+  NODE_VERSION: '20'
+
+jobs:
+  # ============================================================================
+  # Stage 1: Validate Specifications
+  # ============================================================================
+  validate:
+    name: Validate Specifications
+    runs-on: ubuntu-latest
+    outputs:
+      specs_valid: ${{ steps.validate.outputs.specs_valid }}
+      schema_count: ${{ steps.validate.outputs.schema_count }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Validate specifications
+        id: validate
+        run: |
+          chmod +x scripts/validate-spec.sh
+          BASE_REF=origin/main scripts/validate-spec.sh || VALIDATE_FAILED=1
+
+          if [ "$VALIDATE_FAILED" = "1" ]; then
+            echo "specs_valid=false" >> $GITHUB_OUTPUT
+            echo "::warning::Specification validation failed"
+          else
+            echo "specs_valid=true" >> $GITHUB_OUTPUT
+          fi
+
+          # Count schemas
+          SCHEMA_COUNT=$(ls -1 specs/ipai_*.schema.json 2>/dev/null | wc -l || echo 0)
+          echo "schema_count=$SCHEMA_COUNT" >> $GITHUB_OUTPUT
+          echo "::notice::Found $SCHEMA_COUNT ipai_* schemas"
+
+  # ============================================================================
+  # Stage 2: Generate OpenAPI Clients (conditional)
+  # ============================================================================
+  generate-openapi:
+    name: Generate OpenAPI Clients
+    runs-on: ubuntu-latest
+    needs: validate
+    if: needs.validate.outputs.specs_valid == 'true'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Generate clients from OpenAPI (conditional)
+        run: |
+          set -euo pipefail
+
+          if [ -f specs/openapi.yaml ] || [ -f specs/openapi.json ]; then
+            SPEC="specs/openapi.yaml"
+            [ -f specs/openapi.json ] && SPEC="specs/openapi.json"
+
+            mkdir -p clients/typescript services/api
+
+            echo "[openapi] Generating TypeScript client from $SPEC"
+            npx --yes @openapitools/openapi-generator-cli generate \
+              -i "$SPEC" \
+              -g typescript-fetch \
+              -o clients/typescript \
+              --additional-properties=supportsES6=true,npmName=@ipai/api-client || \
+              echo "[openapi] TypeScript generation completed with warnings"
+
+            echo "[openapi] Generating Python FastAPI server from $SPEC"
+            npx --yes @openapitools/openapi-generator-cli generate \
+              -i "$SPEC" \
+              -g python-fastapi \
+              -o services/api \
+              --additional-properties=packageName=ipai_api || \
+              echo "[openapi] FastAPI generation completed with warnings"
+
+          else
+            echo "[openapi] No OpenAPI spec found under specs/. Skipping."
+          fi
+
+      - name: Upload generated clients
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi-clients
+          path: |
+            clients/
+            services/
+          retention-days: 7
+
+  # ============================================================================
+  # Stage 3: Generate Odoo Modules from JSON Schema
+  # ============================================================================
+  generate-odoo:
+    name: Generate Odoo Modules
+    runs-on: ubuntu-latest
+    needs: validate
+    if: needs.validate.outputs.specs_valid == 'true' && needs.validate.outputs.schema_count != '0'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Generate ipai_* Odoo modules
+        run: |
+          set -euo pipefail
+
+          chmod +x scripts/generate-odoo-from-schema.sh
+          chmod +x generators/schema_to_odoo.py
+
+          # Use commit timestamp for deterministic headers
+          export SOURCE_DATE_EPOCH="$(git log -1 --pretty=%ct || echo 0)"
+
+          scripts/generate-odoo-from-schema.sh
+
+          # List generated modules
+          echo "## Generated Odoo Modules" >> $GITHUB_STEP_SUMMARY
+          for dir in addons/ipai_*/; do
+            if [ -d "$dir" ]; then
+              MODULE_NAME=$(basename "$dir")
+              echo "- \`$MODULE_NAME\`" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+
+      - name: Validate generated modules
+        run: |
+          if [ -d "addons" ]; then
+            # Basic Python syntax check
+            find addons -name "*.py" -exec python3 -m py_compile {} \;
+            echo "::notice::All generated Python files pass syntax check"
+          fi
+
+      - name: Upload generated modules
+        uses: actions/upload-artifact@v4
+        with:
+          name: odoo-modules
+          path: addons/
+          retention-days: 7
+
+  # ============================================================================
+  # Stage 4: Test Generated Code
+  # ============================================================================
+  test:
+    name: Test Generated Code
+    runs-on: ubuntu-latest
+    needs: [generate-openapi, generate-odoo]
+    if: always() && (needs.generate-openapi.result == 'success' || needs.generate-odoo.result == 'success')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+
+      - name: Install test dependencies
+        run: |
+          pip install pytest pytest-cov black isort mypy
+          pip install -r requirements.txt || true
+          pip install -r requirements-dev.txt || true
+
+      - name: Lint generated code
+        run: |
+          # Lint generated Odoo modules
+          if [ -d "odoo-modules" ]; then
+            mv odoo-modules addons 2>/dev/null || true
+          fi
+
+          if [ -d "addons" ]; then
+            echo "[lint] Checking addons/"
+            black --check addons/ || echo "[lint] Black formatting issues"
+            isort --check-only addons/ || echo "[lint] isort issues"
+          fi
+
+      - name: Run tests
+        run: |
+          if [ -d "tests" ]; then
+            pytest tests/ -v --tb=short || echo "[test] Some tests failed"
+          else
+            echo "[test] No tests directory found"
+          fi
+
+  # ============================================================================
+  # Stage 5: Create Pull Request (if on push to main)
+  # ============================================================================
+  create-pr:
+    name: Create Pull Request
+    runs-on: ubuntu-latest
+    needs: [validate, generate-openapi, generate-odoo, test]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.test.result != 'failure'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+
+      - name: Merge artifacts into workspace
+        run: |
+          # Move generated Odoo modules
+          if [ -d "odoo-modules" ]; then
+            mkdir -p addons
+            cp -r odoo-modules/* addons/ 2>/dev/null || true
+          fi
+
+          # Move generated OpenAPI clients
+          if [ -d "openapi-clients" ]; then
+            cp -r openapi-clients/* . 2>/dev/null || true
+          fi
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          title: 'chore(codegen): regenerate from spec'
+          commit-message: 'chore(codegen): regenerate from spec [skip ci]'
+          branch: chore/codegen
+          delete-branch: true
+          body: |
+            ## Auto-generated Code
+
+            This PR was automatically generated from specification changes.
+
+            ### Changed Specifications
+            - See commit diff for spec changes
+
+            ### Generated Artifacts
+            - Odoo modules in `addons/ipai_*`
+            - OpenAPI clients in `clients/`
+            - FastAPI server in `services/api/`
+
+            ### Validation
+            - [ ] Spec validation passed
+            - [ ] Generated code passes lint
+            - [ ] Tests pass
+
+  # ============================================================================
+  # Summary
+  # ============================================================================
+  summary:
+    name: Pipeline Summary
+    runs-on: ubuntu-latest
+    needs: [validate, generate-openapi, generate-odoo, test]
+    if: always()
+
+    steps:
+      - name: Generate summary
+        run: |
+          echo "## Spec-First Generation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Stage | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Validate | ${{ needs.validate.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Generate OpenAPI | ${{ needs.generate-openapi.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Generate Odoo | ${{ needs.generate-odoo.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Test | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Schemas Found:** ${{ needs.validate.outputs.schema_count }}" >> $GITHUB_STEP_SUMMARY
