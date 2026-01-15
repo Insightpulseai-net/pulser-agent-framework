@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "Bridge Kit Router",
+  "description": "Captures page context and routes to n8n Bridge Kit workflow with HMAC authentication",
+  "version": "1.0.0",
+  "permissions": ["storage", "activeTab"],
+  "host_permissions": ["https://n8n.insightpulseai.net/*"],
+  "background": {
+    "service_worker": "dist/background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Bridge Kit"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["dist/content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "bridge-kit-cli",
+  "version": "1.0.0",
+  "description": "CLI wrapper for Bridge Kit n8n router with HMAC authentication",
+  "type": "module",
+  "bin": {
+    "bridge": "./bridge.js"
+  },
+  "scripts": {
+    "test": "node bridge.js --help"
+  },
+  "keywords": [
+    "bridge-kit",
+    "n8n",
+    "automation",
+    "claude",
+    "github"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

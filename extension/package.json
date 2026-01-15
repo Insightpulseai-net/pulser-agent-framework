@@ -1,0 +1,17 @@
+{
+  "name": "bridge-kit-extension",
+  "version": "1.0.0",
+  "description": "Chrome MV3 extension for Bridge Kit context capture and routing",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/background.ts src/content.ts src/popup.ts --bundle --outdir=dist --target=chrome120 --format=esm",
+    "watch": "esbuild src/background.ts src/content.ts src/popup.ts --bundle --outdir=dist --target=chrome120 --format=esm --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.268",
+    "esbuild": "^0.21.0",
+    "typescript": "^5.5.0"
+  }
+}
