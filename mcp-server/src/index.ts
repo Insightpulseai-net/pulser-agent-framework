@@ -10,7 +10,7 @@ import {
 import * as crypto from "crypto";
 
 // Configuration from environment
-const N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL || "http://localhost:5678/webhook/bridge-router";
+const N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL || "https://n8n.insightpulseai.net/webhook/bridge-router";
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || "";
 
 // Initialize MCP server

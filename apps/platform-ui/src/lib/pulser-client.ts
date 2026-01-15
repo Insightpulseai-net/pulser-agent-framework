@@ -22,7 +22,7 @@ export interface AgentResponse {
   error?: string;
 }
 
-const PULSER_API_URL = process.env.NEXT_PUBLIC_PULSER_API_URL || "http://localhost:8080";
+const PULSER_API_URL = process.env.NEXT_PUBLIC_PULSER_API_URL || "https://mcp.insightpulseai.net";
 
 export async function callPulserAgent(
   agentName: string,
