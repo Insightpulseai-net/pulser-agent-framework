@@ -1,0 +1,25 @@
+# Guardrail: Enforce main as default branch
+# Prevents the repo from drifting to a random claude/* branch
+name: Enforce main as default branch
+
+on:
+  schedule:
+    - cron: "0 0 * * *"  # daily at midnight UTC
+  workflow_dispatch:
+
+jobs:
+  check-default:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check default branch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          default_branch="$(gh repo view ${{ github.repository }} --json defaultBranchRef -q '.defaultBranchRef.name')"
+          echo "Default branch: $default_branch"
+          if [ "$default_branch" != "main" ]; then
+            echo "::error::Default branch must be 'main', but found '$default_branch'"
+            echo "Fix at: https://github.com/${{ github.repository }}/settings/branches"
+            exit 1
+          fi
+          echo "Default branch is correctly set to 'main'"
