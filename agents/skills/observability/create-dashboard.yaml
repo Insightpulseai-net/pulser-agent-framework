@@ -1,0 +1,199 @@
+# Create Dashboard Skill
+# Generate observability dashboards from service definitions
+
+skill:
+  name: "observe.dashboard"
+  version: "1.0.0"
+  category: "observability"
+  description: "Generate and deploy observability dashboards"
+
+  # Which agents can invoke this skill
+  authorized_agents:
+    - observability
+    - sre
+    - platform-engineer
+
+  # Input parameters
+  input:
+    required:
+      - name: "service_name"
+        type: "string"
+        description: "Name of the service to create dashboard for"
+
+      - name: "dashboard_type"
+        type: "string"
+        enum: ["overview", "errors", "performance", "business", "slo"]
+        description: "Type of dashboard to create"
+
+    optional:
+      - name: "platform"
+        type: "string"
+        enum: ["grafana", "datadog", "newrelic"]
+        default: "grafana"
+        description: "Observability platform"
+
+      - name: "metrics"
+        type: "array"
+        items:
+          type: "object"
+          properties:
+            name: { type: "string" }
+            type: { type: "string", enum: ["counter", "gauge", "histogram"] }
+            labels: { type: "array", items: { type: "string" } }
+        description: "Custom metrics to include"
+
+      - name: "alerts"
+        type: "array"
+        items:
+          type: "object"
+          properties:
+            name: { type: "string" }
+            condition: { type: "string" }
+            severity: { type: "string" }
+        description: "Alerts to create with dashboard"
+
+      - name: "refresh_interval"
+        type: "string"
+        default: "30s"
+        description: "Dashboard auto-refresh interval"
+
+  # Output format
+  output:
+    type: "object"
+    properties:
+      dashboard_id:
+        type: "string"
+        description: "Unique dashboard identifier"
+      dashboard_url:
+        type: "string"
+        format: "uri"
+        description: "URL to access dashboard"
+      panels_created:
+        type: "array"
+        items:
+          type: "object"
+          properties:
+            name: { type: "string" }
+            type: { type: "string" }
+            query: { type: "string" }
+      alerts_created:
+        type: "array"
+        items:
+          type: "object"
+          properties:
+            name: { type: "string" }
+            rule_id: { type: "string" }
+
+  # Tools this skill uses
+  tools:
+    - grafana.dashboard.create
+    - grafana.alert.create
+    - prometheus.query
+
+  # Permissions required
+  permissions:
+    read:
+      - metrics
+      - service_definitions
+    write:
+      - dashboards
+      - alerts
+
+  # Dashboard templates by type
+  templates:
+    overview:
+      panels:
+        - title: "Request Rate"
+          type: "graph"
+          query: 'rate(http_requests_total{service="${service}"}[5m])'
+
+        - title: "Error Rate"
+          type: "graph"
+          query: 'rate(http_requests_total{service="${service}",status=~"5.."}[5m]) / rate(http_requests_total{service="${service}"}[5m])'
+
+        - title: "Latency (P50, P90, P99)"
+          type: "graph"
+          queries:
+            - 'histogram_quantile(0.50, rate(http_request_duration_seconds_bucket{service="${service}"}[5m]))'
+            - 'histogram_quantile(0.90, rate(http_request_duration_seconds_bucket{service="${service}"}[5m]))'
+            - 'histogram_quantile(0.99, rate(http_request_duration_seconds_bucket{service="${service}"}[5m]))'
+
+        - title: "Active Requests"
+          type: "stat"
+          query: 'http_requests_in_progress{service="${service}"}'
+
+    errors:
+      panels:
+        - title: "Error Rate by Endpoint"
+          type: "table"
+          query: 'topk(10, sum by (endpoint) (rate(http_requests_total{service="${service}",status=~"5.."}[5m])))'
+
+        - title: "Error Types"
+          type: "piechart"
+          query: 'sum by (error_type) (increase(errors_total{service="${service}"}[1h]))'
+
+        - title: "Error Timeline"
+          type: "graph"
+          query: 'sum by (status) (rate(http_requests_total{service="${service}",status=~"[45].."}[5m]))'
+
+        - title: "Recent Errors"
+          type: "logs"
+          query: '{service="${service}"} |= "error" | json'
+
+    performance:
+      panels:
+        - title: "CPU Usage"
+          type: "graph"
+          query: 'rate(process_cpu_seconds_total{service="${service}"}[5m])'
+
+        - title: "Memory Usage"
+          type: "graph"
+          query: 'process_resident_memory_bytes{service="${service}"}'
+
+        - title: "Database Connection Pool"
+          type: "gauge"
+          query: 'db_pool_connections_active{service="${service}"} / db_pool_connections_max{service="${service}"}'
+
+        - title: "Slow Queries"
+          type: "table"
+          query: 'topk(10, db_query_duration_seconds{service="${service}",quantile="0.99"})'
+
+    slo:
+      panels:
+        - title: "Availability SLO"
+          type: "gauge"
+          query: '1 - (sum(increase(http_requests_total{service="${service}",status=~"5.."}[30d])) / sum(increase(http_requests_total{service="${service}"}[30d])))'
+          thresholds:
+            - value: 0.999
+              color: "green"
+            - value: 0.99
+              color: "yellow"
+            - value: 0
+              color: "red"
+
+        - title: "Error Budget Remaining"
+          type: "stat"
+          query: '(1 - 0.999) * 30 * 24 * 60 - sum(increase(http_requests_total{service="${service}",status=~"5.."}[30d])) / sum(increase(http_requests_total{service="${service}"}[30d])) * 30 * 24 * 60'
+          unit: "minutes"
+
+        - title: "Error Budget Burn Rate"
+          type: "graph"
+          query: 'sum(rate(http_requests_total{service="${service}",status=~"5.."}[1h])) / sum(rate(http_requests_total{service="${service}"}[1h])) / (1 - 0.999)'
+
+  # Example invocation
+  example:
+    input:
+      service_name: "workbench-api"
+      dashboard_type: "overview"
+      platform: "grafana"
+      refresh_interval: "30s"
+    output:
+      dashboard_id: "dash_abc123"
+      dashboard_url: "https://grafana.insightpulseai.net/d/dash_abc123"
+      panels_created:
+        - name: "Request Rate"
+          type: "graph"
+          query: 'rate(http_requests_total{service="workbench-api"}[5m])'
+      alerts_created:
+        - name: "High Error Rate"
+          rule_id: "alert_def456"

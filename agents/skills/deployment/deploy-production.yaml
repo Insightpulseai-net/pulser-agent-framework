@@ -1,0 +1,269 @@
+# Deploy Production Skill
+# Deploys verified code to production with staged rollout
+
+skill:
+  name: "deploy.production"
+  version: "1.0.0"
+  category: "deployment"
+  description: "Deploy verified code to production with staged rollout"
+
+  # Which agents can invoke this skill
+  authorized_agents:
+    - release
+
+  # Requires approval from
+  requires_approval:
+    - sre
+    - pod-lead
+
+  # Input parameters
+  input:
+    required:
+      - name: "version"
+        type: "string"
+        pattern: "^v\\d+\\.\\d+\\.\\d+(-[a-zA-Z0-9.]+)?$"
+        description: "Semantic version to deploy (e.g., v1.2.3)"
+
+      - name: "validation_run_id"
+        type: "string"
+        description: "ID of passing validation run"
+
+      - name: "canary_deployment_id"
+        type: "string"
+        description: "ID of successful canary deployment"
+
+    optional:
+      - name: "rollout_strategy"
+        type: "string"
+        enum: ["immediate", "staged", "blue_green"]
+        default: "staged"
+        description: "How to roll out the deployment"
+
+      - name: "traffic_percent_initial"
+        type: "integer"
+        minimum: 1
+        maximum: 100
+        default: 10
+        description: "Initial traffic percentage for staged rollout"
+
+      - name: "run_migrations"
+        type: "boolean"
+        default: true
+        description: "Whether to run database migrations"
+
+      - name: "notify_channels"
+        type: "array"
+        items: { type: "string" }
+        default: ["#release-train", "#incidents"]
+        description: "Slack channels to notify"
+
+  # Output format
+  output:
+    type: "object"
+    properties:
+      deployment_id:
+        type: "string"
+        description: "Unique deployment identifier"
+      production_url:
+        type: "string"
+        format: "uri"
+        description: "Production URL"
+      status:
+        type: "string"
+        enum: ["success", "failed", "rolled_back"]
+      version:
+        type: "string"
+      previous_version:
+        type: "string"
+      duration_seconds:
+        type: "integer"
+      migrations_applied:
+        type: "array"
+        items:
+          type: "object"
+          properties:
+            version: { type: "string" }
+            name: { type: "string" }
+            duration_ms: { type: "integer" }
+      health_checks:
+        type: "array"
+        items:
+          type: "object"
+          properties:
+            endpoint: { type: "string" }
+            status: { type: "integer" }
+            latency_ms: { type: "integer" }
+      rollback_available:
+        type: "boolean"
+      rollback_command:
+        type: "string"
+
+  # Tools this skill uses
+  tools:
+    - github.release.create
+    - vercel.deploy.prod
+    - digitalocean.app.deploy
+    - supabase.migrations.run
+    - supabase.functions.deploy
+    - pagerduty.notify
+    - slack.notify
+
+  # Permissions required
+  permissions:
+    read:
+      - codebase
+      - github.releases
+      - deployments.status
+    write:
+      - github.releases
+      - deployments
+      - migrations
+    execute:
+      - deploy.production
+      - migrations.run
+      - healthcheck.run
+
+  # Environment restrictions
+  environments:
+    allowed: [production]
+    requires_approval: true
+
+  # Prerequisites that must be true
+  prerequisites:
+    - name: "canary_successful"
+      check: "canary deployment passed all health checks"
+
+    - name: "tests_passed"
+      check: "validation_run_id exists and status is success"
+
+    - name: "error_budget_available"
+      check: "error budget > 10%"
+
+    - name: "no_active_incidents"
+      check: "no SEV1/SEV2 incidents active"
+
+  # Constraints
+  constraints:
+    - "Must have successful canary deployment"
+    - "Must have passing validation run"
+    - "Cannot deploy during active incidents"
+    - "Requires SRE approval"
+    - "Must have rollback plan"
+
+  # Deployment stages
+  stages:
+    - name: "pre-deploy"
+      actions:
+        - validate_prerequisites
+        - acquire_deployment_lock
+        - notify_start
+
+    - name: "migrations"
+      condition: "input.run_migrations == true"
+      actions:
+        - backup_database
+        - run_migrations
+        - verify_migrations
+
+    - name: "deploy"
+      actions:
+        - deploy_application
+        - deploy_edge_functions
+        - switch_traffic
+
+    - name: "verify"
+      actions:
+        - run_health_checks
+        - verify_key_journeys
+        - check_error_rates
+
+    - name: "post-deploy"
+      actions:
+        - update_status_page
+        - notify_success
+        - release_deployment_lock
+
+  # Rollback configuration
+  rollback:
+    automatic_triggers:
+      - condition: "error_rate > 1%"
+        duration: "5m"
+      - condition: "p99_latency > 2x baseline"
+        duration: "5m"
+      - condition: "health_check_failures > 3"
+
+    manual_command: |
+      ./scripts/rollback.sh \
+        --service=all \
+        --env=production \
+        --to=${{ output.previous_version }}
+
+    preserves:
+      - previous_3_versions
+      - database_backup
+
+  # Example invocation
+  example:
+    input:
+      version: "v1.2.3"
+      validation_run_id: "val_abc123"
+      canary_deployment_id: "dpl_canary_456"
+      rollout_strategy: "staged"
+      traffic_percent_initial: 10
+      run_migrations: true
+    output:
+      deployment_id: "dpl_prod_789"
+      production_url: "https://app.insightpulseai.net"
+      status: "success"
+      version: "v1.2.3"
+      previous_version: "v1.2.2"
+      duration_seconds: 180
+      migrations_applied:
+        - version: "20240115_001"
+          name: "add_user_preferences"
+          duration_ms: 1200
+      health_checks:
+        - endpoint: "/api/health"
+          status: 200
+          latency_ms: 45
+        - endpoint: "/api/v1/users"
+          status: 200
+          latency_ms: 120
+      rollback_available: true
+      rollback_command: "./scripts/rollback.sh --env=production --to=v1.2.2"
+
+# Monitoring during deployment
+monitoring:
+  metrics:
+    - name: "http_requests_total"
+      alert_if: "rate > 2x baseline"
+
+    - name: "http_request_duration_seconds"
+      percentile: 99
+      alert_if: "> 500ms"
+
+    - name: "http_server_errors_total"
+      alert_if: "rate > 0.01"
+
+  duration: "30m"
+  check_interval: "1m"
+
+# Notifications
+notifications:
+  on_start:
+    channels: ["#release-train"]
+    message: "Deploying ${{ input.version }} to production"
+
+  on_success:
+    channels: ["#release-train"]
+    message: "Successfully deployed ${{ input.version }} to production"
+
+  on_failure:
+    channels: ["#release-train", "#incidents"]
+    pagerduty: true
+    message: "Production deployment failed for ${{ input.version }}"
+
+  on_rollback:
+    channels: ["#release-train", "#incidents"]
+    pagerduty: true
+    message: "Rolled back ${{ input.version }} to ${{ output.previous_version }}"

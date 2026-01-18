@@ -1,0 +1,789 @@
+# Multi-Agent DevOps Framework - Agent Registry
+# Defines all agent roles, tool permissions, and collaboration contracts
+# Version: 1.0.0
+
+version: "1.0.0"
+description: "InsightPulseAI Multi-Agent DevOps Framework Registry"
+
+# =============================================================================
+# ORGANIZATIONAL TOPOLOGY
+# =============================================================================
+# Product Delivery Pods (velocity) + Platform/DevEx (paved roads) + SRE (reliability)
+# + Data/AI Ops (pipelines) + Security/Governance (guardrails)
+
+topology:
+  pods:
+    - name: product-delivery
+      description: "Feature velocity - ships code via PRs + CI gates"
+      agents: [planner, implementer, reviewer, release]
+
+    - name: platform-devex
+      description: "Team that makes teams faster - paved roads"
+      agents: [platform-engineer, cicd, dx-docs, tooling]
+
+    - name: sre-reliability
+      description: "Keep prod alive - SLOs, alerts, incident response"
+      agents: [sre, observability, chaos]
+
+    - name: data-ai-ops
+      description: "Pipelines + model/RAG correctness"
+      agents: [data-fabcon, etl, eval]
+
+    - name: security-governance
+      description: "Guardrails not blockers"
+      agents: [policy, compliance]
+
+# =============================================================================
+# AGENT DEFINITIONS
+# =============================================================================
+
+agents:
+  # ---------------------------------------------------------------------------
+  # PRODUCT DELIVERY POD
+  # ---------------------------------------------------------------------------
+
+  planner:
+    id: agent_planner_001
+    name: "PM/Planner Agent"
+    pod: product-delivery
+    version: "1.0.0"
+    status: active
+
+    purpose: |
+      Turn goals into spec-kit bundles (constitution/prd/plan/tasks).
+      Creates GitHub issues/subtasks for tracking.
+
+    capabilities:
+      - Parse user requirements and goals
+      - Generate spec-kit bundles (constitution, prd, plan, tasks)
+      - Create GitHub issues and subtasks
+      - Define acceptance criteria
+      - Estimate scope and dependencies
+      - Generate rollback plans
+
+    tools:
+      read:
+        - github.issues.read
+        - github.prs.read
+        - spec.catalog.read
+        - docs.read
+      write:
+        - spec.bundle.write
+        - github.issues.create
+        - github.issues.update
+        - tasks.md.write
+
+    constraints:
+      - "Cannot write code"
+      - "Cannot execute deployments"
+      - "Cannot modify production"
+      - "Must include acceptance criteria for every task"
+
+    outputs:
+      - type: spec-bundle
+        path: "spec/{slug}/"
+        files: [constitution.md, prd.md, plan.md, tasks.md]
+      - type: work-order
+        format: yaml
+
+    handoff_to: [implementer]
+
+  implementer:
+    id: agent_impl_002
+    name: "Implementer Agent"
+    pod: product-delivery
+    version: "1.0.0"
+    status: active
+    dependencies: [planner]
+
+    purpose: |
+      Execute code changes + tests based on spec-kit.
+      Creates PRs with code, migrations, and runbook deltas.
+
+    capabilities:
+      - Generate production-ready code
+      - Write unit/integration tests
+      - Create database migrations
+      - Update runbooks with changes
+      - Follow 80/15/5 rule for Odoo modules
+
+    # Inherits capabilities from existing agents
+    extends:
+      - agents/CodeGenerator.SKILL.md
+      - agents/SQLAgent.SKILL.md
+
+    tools:
+      read:
+        - spec.bundle.read
+        - codebase.read
+        - github.prs.read
+      write:
+        - codebase.write
+        - github.prs.create
+        - migrations.write
+        - runbooks.delta.write
+      execute:
+        - lint.run
+        - typecheck.run
+
+    constraints:
+      - "Cannot deploy to any environment"
+      - "Cannot execute migrations"
+      - "Must have spec-kit before coding"
+      - "Must include tests for all changes"
+      - "Must update runbook if behavior changes"
+
+    outputs:
+      - type: pull-request
+        includes: [code, tests, migrations, runbook-delta]
+
+    handoff_to: [reviewer]
+
+  reviewer:
+    id: agent_review_003
+    name: "Reviewer/QA Agent"
+    pod: product-delivery
+    version: "1.0.0"
+    status: active
+    dependencies: [implementer]
+
+    purpose: |
+      Run static checks, unit/integration/e2e tests, UX acceptance.
+      Block PRs on red CI.
+
+    capabilities:
+      - Execute test suites (unit, integration, e2e)
+      - Run static analysis (lint, typecheck)
+      - Validate spec compliance
+      - Check test coverage thresholds
+      - Review code for security issues
+
+    extends:
+      - agents/ValidationAgent.SKILL.md
+      - agents/ComplianceValidator.SKILL.md
+
+    tools:
+      read:
+        - codebase.read
+        - github.prs.read
+        - spec.bundle.read
+      execute:
+        - pytest.run
+        - playwright.run
+        - lint.run
+        - typecheck.run
+        - security.scan
+      write:
+        - github.pr.comment
+        - github.pr.review
+        - github.checks.create
+
+    constraints:
+      - "Cannot modify code (review only)"
+      - "Cannot approve own PRs"
+      - "Must block on test failures"
+      - "Must verify spec compliance"
+
+    outputs:
+      - type: validation-report
+        includes: [test-results, coverage, lint-results, security-scan]
+
+    handoff_to: [release]
+
+  release:
+    id: agent_release_004
+    name: "Release Agent"
+    pod: product-delivery
+    version: "1.0.0"
+    status: active
+    dependencies: [reviewer]
+
+    purpose: |
+      Handle versioning, changelog, release notes, staged rollout.
+      Execute preview -> canary -> prod deployments.
+
+    capabilities:
+      - Generate semantic versions
+      - Create changelogs and release notes
+      - Execute staged rollouts (preview, canary, prod)
+      - Verify health checks
+      - Execute rollbacks on failure
+
+    extends:
+      - agents/DeploymentOrchestrator.SKILL.md
+
+    tools:
+      read:
+        - github.releases.read
+        - github.prs.merged.read
+        - deployments.status.read
+      write:
+        - github.releases.create
+        - changelog.write
+        - deployment.trigger
+      execute:
+        - healthcheck.run
+        - rollback.execute
+
+    constraints:
+      - "Cannot deploy without passed CI"
+      - "Cannot skip canary in prod deployments"
+      - "Must verify health before traffic switch"
+      - "Must support instant rollback"
+
+    environments:
+      preview:
+        auto_deploy: true
+        approval_required: false
+      canary:
+        auto_deploy: true
+        traffic_percent: 10
+        approval_required: false
+      production:
+        auto_deploy: false
+        approval_required: true
+        approvers: [sre, pod-lead]
+
+    outputs:
+      - type: release
+        includes: [version, changelog, deployment-status]
+
+    handoff_to: [sre]
+
+  # ---------------------------------------------------------------------------
+  # PLATFORM / DEVEX TEAM
+  # ---------------------------------------------------------------------------
+
+  platform-engineer:
+    id: agent_platform_001
+    name: "Platform Engineer Agent"
+    pod: platform-devex
+    version: "1.0.0"
+    status: active
+
+    purpose: |
+      Maintain templates, golden paths, infra modules, base images.
+      Make teams faster with standardized tooling.
+
+    capabilities:
+      - Create and maintain project templates
+      - Define golden paths for common patterns
+      - Manage infrastructure modules (Terraform, Pulumi)
+      - Build and publish base images
+      - Define standard service configurations
+
+    tools:
+      read:
+        - templates.read
+        - infra.modules.read
+        - docker.images.read
+      write:
+        - templates.write
+        - infra.modules.write
+        - docker.images.publish
+
+    deliverables:
+      - name: golden-nextjs-supabase
+        path: platform/templates/nextjs-supabase/
+        description: "Next.js + Supabase + Actions + lint/test/preview"
+      - name: golden-fastapi-service
+        path: platform/templates/fastapi-service/
+        description: "FastAPI + OpenAPI + deploy + health checks"
+      - name: golden-edge-function
+        path: platform/templates/edge-function/
+        description: "Supabase Edge Function + secrets + tests"
+
+  cicd:
+    id: agent_cicd_002
+    name: "CI/CD Agent"
+    pod: platform-devex
+    version: "1.0.0"
+    status: active
+
+    purpose: |
+      Manage GitHub Actions, preview environments, release gates.
+      Optimize caching, generate SBOMs.
+
+    capabilities:
+      - Create and maintain GitHub Actions workflows
+      - Configure preview environments
+      - Implement release gates
+      - Optimize build caching
+      - Generate SBOMs for releases
+
+    tools:
+      read:
+        - workflows.read
+        - github.actions.runs.read
+      write:
+        - workflows.write
+        - github.environments.configure
+        - cache.configure
+      execute:
+        - sbom.generate
+
+  dx-docs:
+    id: agent_docs_003
+    name: "DX Docs Agent"
+    pod: platform-devex
+    version: "1.0.0"
+    status: active
+
+    purpose: |
+      Maintain canonical docs, runbooks, repo standards.
+      Enforce spec-kit requirements in PRs.
+
+    capabilities:
+      - Generate and maintain documentation
+      - Create and update runbooks
+      - Enforce documentation standards
+      - Validate spec-kit completeness
+
+    tools:
+      read:
+        - docs.read
+        - spec.catalog.read
+        - runbooks.read
+      write:
+        - docs.write
+        - runbooks.write
+      execute:
+        - docs.lint
+        - spec.validate
+
+  tooling:
+    id: agent_tooling_004
+    name: "Tooling Agent"
+    pod: platform-devex
+    version: "1.0.0"
+    status: active
+
+    purpose: |
+      Manage Pulser/Bruno skills registry, tool router, permission policies.
+
+    capabilities:
+      - Register and manage agent skills
+      - Route tool requests
+      - Enforce permission policies
+      - Monitor tool usage
+
+    tools:
+      read:
+        - skills.registry.read
+        - tools.usage.read
+      write:
+        - skills.registry.write
+        - permissions.policy.write
+
+  # ---------------------------------------------------------------------------
+  # SRE / RELIABILITY
+  # ---------------------------------------------------------------------------
+
+  sre:
+    id: agent_sre_001
+    name: "SRE Agent"
+    pod: sre-reliability
+    version: "1.0.0"
+    status: active
+
+    purpose: |
+      Manage SLOs, alerts, on-call automation, incident commander playbooks.
+      Rule: If it pages, it needs runbook + owner + SLO + rollback command.
+
+    capabilities:
+      - Define and monitor SLOs
+      - Configure alerting rules
+      - Automate on-call responses
+      - Execute incident playbooks
+      - Approve production deployments
+
+    tools:
+      read:
+        - metrics.read
+        - alerts.read
+        - incidents.read
+        - deployments.status.read
+      write:
+        - slos.write
+        - alerts.configure
+        - incidents.create
+        - incidents.update
+      execute:
+        - pagerduty.escalate
+        - rollback.execute
+
+    constraints:
+      - "Every alert must have a runbook"
+      - "Every page must have an owner"
+      - "Every service must have SLO"
+      - "Every deployment must have rollback"
+
+    on_incident:
+      - validate_runbook_exists
+      - assign_incident_commander
+      - start_timeline
+      - notify_stakeholders
+
+  observability:
+    id: agent_obs_002
+    name: "Observability Agent"
+    pod: sre-reliability
+    version: "1.0.0"
+    status: active
+
+    purpose: |
+      Manage logs/metrics/traces, dashboards, alert tuning.
+
+    capabilities:
+      - Configure logging pipelines
+      - Set up metrics collection
+      - Implement distributed tracing
+      - Create dashboards
+      - Tune alert thresholds
+
+    tools:
+      read:
+        - logs.read
+        - metrics.read
+        - traces.read
+      write:
+        - dashboards.write
+        - alerts.tune
+        - logging.configure
+
+  chaos:
+    id: agent_chaos_003
+    name: "Chaos/Resilience Agent"
+    pod: sre-reliability
+    version: "1.0.0"
+    status: active
+
+    purpose: |
+      Execute failure injection tests, rollback drills, load tests.
+
+    capabilities:
+      - Run chaos experiments
+      - Execute rollback drills
+      - Perform load testing
+      - Validate disaster recovery
+
+    tools:
+      execute:
+        - chaos.inject
+        - loadtest.run
+        - rollback.drill
+
+    constraints:
+      - "Never run in production without approval"
+      - "Always have rollback ready"
+      - "Notify on-call before experiments"
+
+    environments:
+      allowed: [staging, preview]
+      production_requires: [sre-approval, maintenance-window]
+
+  # ---------------------------------------------------------------------------
+  # DATA / AI OPS
+  # ---------------------------------------------------------------------------
+
+  data-fabcon:
+    id: agent_data_001
+    name: "Data Fabcon Agent"
+    pod: data-ai-ops
+    version: "1.0.0"
+    status: active
+
+    purpose: |
+      Profile data, detect schema drift, validate medallion architecture,
+      optimize cost/performance.
+
+    capabilities:
+      - Profile data quality
+      - Detect schema drift
+      - Validate medallion layer compliance
+      - Optimize query performance
+      - Monitor data costs
+
+  etl:
+    id: agent_etl_002
+    name: "ETL Agent"
+    pod: data-ai-ops
+    version: "1.0.0"
+    status: active
+
+    purpose: |
+      Manage pipeline changes, backfills, idempotency, lineage docs.
+
+    capabilities:
+      - Create and modify ETL pipelines
+      - Execute backfills
+      - Ensure idempotency
+      - Document data lineage
+
+    constraints:
+      - "Schema change = migration + backfill script + breaking-change label"
+      - "All transforms must be idempotent"
+
+  eval:
+    id: agent_eval_003
+    name: "Eval Agent"
+    pod: data-ai-ops
+    version: "1.0.0"
+    status: active
+
+    purpose: |
+      Run RAG/LLM eval harness, detect regressions,
+      manage prompts and versions.
+
+    capabilities:
+      - Execute LLM evaluations
+      - Detect quality regressions
+      - Manage prompt versions
+      - A/B test prompts
+
+    tools:
+      execute:
+        - eval.harness.run
+        - regression.detect
+      write:
+        - prompts.version.create
+        - eval.results.write
+
+  # ---------------------------------------------------------------------------
+  # SECURITY / GOVERNANCE
+  # ---------------------------------------------------------------------------
+
+  policy:
+    id: agent_policy_001
+    name: "Policy Agent"
+    pod: security-governance
+    version: "1.0.0"
+    status: active
+
+    purpose: |
+      Enforce least-privilege tool permissions, secrets policy, RLS checks.
+
+    capabilities:
+      - Validate tool permissions
+      - Audit secrets usage
+      - Check RLS policies
+      - Review access patterns
+
+    constraints:
+      - "Default deny for destructive tools"
+      - "Escalation requires explicit workflow step"
+
+    policies:
+      destructive_tools:
+        default: deny
+        requires: [approval, audit-log]
+      secrets:
+        rotation: 90d
+        audit: always
+      rls:
+        required: true
+        exceptions_require: [security-review]
+
+  compliance:
+    id: agent_compliance_002
+    name: "Compliance Agent"
+    pod: security-governance
+    version: "1.0.0"
+    status: active
+
+    purpose: |
+      Validate Odoo/OCA compliance, license headers, audit trails.
+
+    capabilities:
+      - Verify OCA module compliance
+      - Check license headers
+      - Validate audit trail completeness
+      - Generate compliance reports
+
+    extends:
+      - agents/ComplianceValidator.SKILL.md
+
+# =============================================================================
+# COLLABORATION MECHANICS
+# =============================================================================
+
+collaboration:
+  # Work Order format - standard for all agent handoffs
+  work_order:
+    required_fields:
+      - intent: "What outcome is expected"
+      - scope: "What files/systems are affected"
+      - constraints: "Rules (no UI/manual, CI-only, schema rules)"
+      - acceptance: "Tests, endpoints, screenshots, perf budgets"
+      - rollback: "Exact command/steps to undo"
+
+    storage:
+      specs: "spec/{slug}/"
+      runbooks: "ops/runbooks/{slug}.md"
+
+  # Communication channels
+  channels:
+    release-train:
+      purpose: "What's shipping this week"
+      participants: [release, planner, sre]
+    incidents:
+      purpose: "Active incidents - SRE owns, pods participate"
+      participants: [sre, observability, all-pods]
+    platform-paved-road:
+      purpose: "Templates and standards updates"
+      participants: [platform-engineer, cicd, dx-docs]
+    schema-drift:
+      purpose: "DB changes and reviews"
+      participants: [data-fabcon, etl, implementer]
+
+  # Handoff contracts
+  handoff_protocol:
+    - sender_validates_output
+    - receiver_validates_input
+    - audit_log_entry
+    - status_update_to_channel
+
+# =============================================================================
+# PERMISSION TIERS (by blast radius)
+# =============================================================================
+
+permissions:
+  tiers:
+    read_only:
+      description: "Default tier - observation only"
+      allows: [read, list, describe]
+      denies: [write, execute, delete]
+
+    scoped_write:
+      description: "Write in preview/staging only"
+      allows: [read, write]
+      environments: [preview, staging]
+      denies: [production-write]
+
+    prod_via_ci:
+      description: "Production changes only via CI"
+      requires:
+        - approved_pr
+        - tagged_release
+        - automated_deploy_workflow
+      manual_override: false
+
+    emergency:
+      description: "Break-glass for incidents"
+      requires:
+        - incident_id
+        - sre_approval
+        - audit_log
+      auto_expires: 4h
+
+  tool_permissions:
+    github:
+      prs.create: scoped_write
+      prs.merge: prod_via_ci
+      releases.create: prod_via_ci
+
+    supabase:
+      migrations.execute: prod_via_ci
+      edge_functions.deploy: prod_via_ci
+      rls.modify: requires_security_review
+
+    digitalocean:
+      app.deploy: prod_via_ci
+      droplet.create: requires_approval
+      dns.modify: requires_sre_approval
+
+    kubernetes:
+      deployment.scale: scoped_write
+      deployment.update: prod_via_ci
+      namespace.delete: emergency_only
+
+# =============================================================================
+# WORKFLOW: HOW AGENTS SHIP CODE
+# =============================================================================
+
+workflows:
+  standard_release:
+    name: "Standard Release Pipeline"
+    description: "Repeatable loop for shipping code"
+
+    steps:
+      - agent: planner
+        action: create_spec_kit
+        outputs: [spec-bundle, github-issues]
+
+      - agent: implementer
+        action: create_pr
+        inputs: [spec-bundle]
+        outputs: [pr-with-code, tests, migrations, runbook-delta]
+
+      - agent: reviewer
+        action: validate
+        inputs: [pr]
+        gates:
+          - tests_pass
+          - coverage_threshold
+          - lint_clean
+          - security_scan_clean
+          - spec_compliance
+        outputs: [validation-report]
+
+      - agent: release
+        action: staged_rollout
+        inputs: [validated-pr]
+        stages:
+          - preview: auto
+          - canary: auto_with_monitoring
+          - production: manual_approval
+        outputs: [deployment-status]
+
+      - agent: sre
+        action: monitor
+        inputs: [deployment-status]
+        monitors:
+          - slo_compliance
+          - error_budget
+          - latency_p99
+        duration: 24h
+
+# =============================================================================
+# METRICS & OBSERVABILITY
+# =============================================================================
+
+metrics:
+  dora:
+    - deployment_frequency
+    - lead_time_for_changes
+    - change_failure_rate
+    - mean_time_to_recovery
+
+  agent_performance:
+    - task_completion_rate
+    - handoff_success_rate
+    - rollback_rate
+    - dpo_pairs_generated
+
+  cost:
+    - cost_per_deploy
+    - token_usage_by_agent
+    - infrastructure_cost_delta
+
+# =============================================================================
+# FAILURE MODES & MITIGATIONS
+# =============================================================================
+
+failure_modes:
+  - mode: "Too many generalist agents"
+    symptom: "Duplicated work, inconsistent standards"
+    mitigation: "Platform templates + strict handoff contracts"
+
+  - mode: "Direct prod mutations by agents"
+    symptom: "Silent drift from desired state"
+    mitigation: "Prod only via CI + tagged release"
+
+  - mode: "No shared metrics"
+    symptom: "Cannot tell if agents help"
+    mitigation: "Track DORA + change failure rate + MTTR + cost per deploy"
+
+  - mode: "Handoff failures"
+    symptom: "Tasks stuck between agents"
+    mitigation: "Timeout escalation + audit trail + retry with backoff"

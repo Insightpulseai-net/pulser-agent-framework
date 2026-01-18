@@ -1,0 +1,165 @@
+# Deploy Preview Skill
+# Deploys code to preview environment for validation
+
+skill:
+  name: "deploy.preview"
+  version: "1.0.0"
+  category: "deployment"
+  description: "Deploy changes to preview environment for validation"
+
+  # Which agents can invoke this skill
+  authorized_agents:
+    - release
+    - cicd
+
+  # Input parameters
+  input:
+    required:
+      - name: "pr_number"
+        type: "integer"
+        description: "Pull request number to deploy"
+
+      - name: "commit_sha"
+        type: "string"
+        description: "Git commit SHA to deploy"
+
+    optional:
+      - name: "platform"
+        type: "string"
+        enum: ["vercel", "digitalocean", "kubernetes"]
+        default: "vercel"
+        description: "Deployment platform"
+
+      - name: "environment_vars"
+        type: "object"
+        default: {}
+        description: "Environment variables to set"
+
+      - name: "timeout_minutes"
+        type: "integer"
+        default: 10
+        description: "Deployment timeout"
+
+  # Output format
+  output:
+    type: "object"
+    properties:
+      deployment_id:
+        type: "string"
+        description: "Unique deployment identifier"
+      preview_url:
+        type: "string"
+        format: "uri"
+        description: "URL of preview deployment"
+      status:
+        type: "string"
+        enum: ["success", "failed", "timeout"]
+      duration_seconds:
+        type: "integer"
+      logs:
+        type: "array"
+        items:
+          type: "object"
+          properties:
+            timestamp: { type: "string" }
+            level: { type: "string" }
+            message: { type: "string" }
+
+  # Tools this skill uses
+  tools:
+    - vercel.deploy
+    - digitalocean.app.deploy
+    - kubernetes.deployment.apply
+    - github.deployment.create
+    - github.deployment.status
+
+  # Permissions required
+  permissions:
+    read:
+      - codebase
+      - github.pr
+    write:
+      - github.deployment
+    execute:
+      - vercel.deploy
+      - healthcheck.run
+
+  # Environment restrictions
+  environments:
+    allowed: [preview]
+    denied: [production, canary]
+
+  # Constraints
+  constraints:
+    - "PR must exist and be open"
+    - "Commit must be in PR"
+    - "Cannot deploy to production"
+
+  # Retry configuration
+  retry:
+    max_attempts: 3
+    backoff: exponential
+    initial_delay_seconds: 5
+
+  # Health check after deployment
+  health_check:
+    endpoint: "/api/health"
+    expected_status: 200
+    timeout_seconds: 30
+    retries: 5
+
+  # Example invocation
+  example:
+    input:
+      pr_number: 42
+      commit_sha: "abc123def456"
+      platform: "vercel"
+    output:
+      deployment_id: "dpl_abc123"
+      preview_url: "https://pr-42.preview.example.com"
+      status: "success"
+      duration_seconds: 45
+      logs:
+        - timestamp: "2024-01-15T10:30:00Z"
+          level: "info"
+          message: "Deployment started"
+        - timestamp: "2024-01-15T10:30:45Z"
+          level: "info"
+          message: "Deployment completed"
+
+# Implementation notes
+implementation:
+  # Vercel deployment
+  vercel:
+    command: |
+      vercel deploy \
+        --token=$VERCEL_TOKEN \
+        --scope=$VERCEL_SCOPE \
+        --meta pr=${{ input.pr_number }} \
+        --meta commit=${{ input.commit_sha }}
+
+  # DigitalOcean deployment
+  digitalocean:
+    command: |
+      doctl apps create-deployment $APP_ID \
+        --wait \
+        --format ID,Phase
+
+  # Kubernetes deployment
+  kubernetes:
+    manifest: |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: preview-pr-${{ input.pr_number }}
+        namespace: preview
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: preview-${{ input.pr_number }}
+        template:
+          spec:
+            containers:
+              - name: app
+                image: ${{ registry }}:${{ input.commit_sha }}

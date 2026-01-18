@@ -1,0 +1,226 @@
+# Verify Tests Skill
+# Execute test suites and validate coverage thresholds
+
+skill:
+  name: "verify.tests"
+  version: "1.0.0"
+  category: "validation"
+  description: "Execute test suites and validate coverage thresholds"
+
+  # Which agents can invoke this skill
+  authorized_agents:
+    - reviewer
+    - cicd
+
+  # Input parameters
+  input:
+    required:
+      - name: "test_paths"
+        type: "array"
+        items: { type: "string" }
+        description: "Paths to test files or directories"
+
+    optional:
+      - name: "test_type"
+        type: "string"
+        enum: ["unit", "integration", "e2e", "all"]
+        default: "all"
+        description: "Type of tests to run"
+
+      - name: "framework"
+        type: "string"
+        enum: ["pytest", "jest", "playwright", "vitest"]
+        default: "pytest"
+        description: "Test framework to use"
+
+      - name: "coverage_threshold"
+        type: "number"
+        minimum: 0
+        maximum: 100
+        default: 90
+        description: "Minimum coverage percentage required"
+
+      - name: "parallel"
+        type: "boolean"
+        default: true
+        description: "Run tests in parallel"
+
+      - name: "markers"
+        type: "array"
+        items: { type: "string" }
+        default: []
+        description: "Test markers to filter (pytest -m)"
+
+      - name: "timeout_minutes"
+        type: "integer"
+        default: 30
+        description: "Test execution timeout"
+
+      - name: "fail_fast"
+        type: "boolean"
+        default: false
+        description: "Stop on first failure"
+
+  # Output format
+  output:
+    type: "object"
+    properties:
+      validation_run_id:
+        type: "string"
+        description: "Unique ID for this validation run"
+      status:
+        type: "string"
+        enum: ["passed", "failed", "error", "timeout"]
+      summary:
+        type: "object"
+        properties:
+          total: { type: "integer" }
+          passed: { type: "integer" }
+          failed: { type: "integer" }
+          skipped: { type: "integer" }
+          duration_seconds: { type: "number" }
+      coverage:
+        type: "object"
+        properties:
+          line_rate: { type: "number" }
+          branch_rate: { type: "number" }
+          threshold_met: { type: "boolean" }
+          uncovered_files:
+            type: "array"
+            items:
+              type: "object"
+              properties:
+                file: { type: "string" }
+                coverage: { type: "number" }
+      failures:
+        type: "array"
+        items:
+          type: "object"
+          properties:
+            test: { type: "string" }
+            file: { type: "string" }
+            line: { type: "integer" }
+            error: { type: "string" }
+            traceback: { type: "string" }
+      artifacts:
+        type: "object"
+        properties:
+          coverage_report: { type: "string" }
+          junit_xml: { type: "string" }
+          html_report: { type: "string" }
+
+  # Tools this skill uses
+  tools:
+    - pytest.run
+    - jest.run
+    - playwright.run
+    - coverage.report
+
+  # Permissions required
+  permissions:
+    read:
+      - codebase
+      - test_fixtures
+    write:
+      - test_reports
+    execute:
+      - tests
+
+  # Environment requirements
+  environment:
+    services:
+      - name: "postgres"
+        image: "postgres:15"
+        required_for: ["integration", "e2e"]
+      - name: "redis"
+        image: "redis:7"
+        required_for: ["integration", "e2e"]
+
+  # Constraints
+  constraints:
+    - "Tests must complete within timeout"
+    - "Coverage must meet threshold for merge"
+    - "No flaky tests allowed (retry 2x)"
+
+  # Retry configuration for flaky tests
+  retry:
+    max_attempts: 2
+    only_failures: true
+
+  # Example invocation
+  example:
+    input:
+      test_paths: ["tests/unit", "tests/integration"]
+      test_type: "all"
+      framework: "pytest"
+      coverage_threshold: 90
+      parallel: true
+    output:
+      validation_run_id: "val_abc123"
+      status: "passed"
+      summary:
+        total: 150
+        passed: 148
+        failed: 0
+        skipped: 2
+        duration_seconds: 45.3
+      coverage:
+        line_rate: 92.5
+        branch_rate: 88.2
+        threshold_met: true
+        uncovered_files:
+          - file: "src/utils/deprecated.py"
+            coverage: 45.0
+      failures: []
+      artifacts:
+        coverage_report: "coverage/html/index.html"
+        junit_xml: "reports/junit.xml"
+        html_report: "reports/test-report.html"
+
+# Implementation
+implementation:
+  pytest:
+    command: |
+      pytest ${{ input.test_paths | join(' ') }} \
+        -v \
+        --tb=short \
+        --cov=./ \
+        --cov-report=xml:coverage.xml \
+        --cov-report=html:coverage/html \
+        --cov-fail-under=${{ input.coverage_threshold }} \
+        --junitxml=reports/junit.xml \
+        ${{ input.parallel ? '-n auto' : '' }} \
+        ${{ input.fail_fast ? '-x' : '' }} \
+        ${{ input.markers | map('"-m " + .') | join(' ') }}
+
+  jest:
+    command: |
+      jest ${{ input.test_paths | join(' ') }} \
+        --coverage \
+        --coverageThreshold='{"global":{"lines":${{ input.coverage_threshold }}}}' \
+        --ci \
+        --reporters=default \
+        --reporters=jest-junit \
+        ${{ input.parallel ? '--maxWorkers=auto' : '--runInBand' }} \
+        ${{ input.fail_fast ? '--bail' : '' }}
+
+  playwright:
+    command: |
+      npx playwright test ${{ input.test_paths | join(' ') }} \
+        --reporter=html,junit \
+        ${{ input.parallel ? '--workers=auto' : '--workers=1' }} \
+        ${{ input.fail_fast ? '--max-failures=1' : '' }}
+
+# Quality gates
+gates:
+  - name: "coverage_threshold"
+    condition: "output.coverage.line_rate >= input.coverage_threshold"
+    message: "Coverage must be at least {{ input.coverage_threshold }}%"
+
+  - name: "no_failures"
+    condition: "output.summary.failed == 0"
+    message: "All tests must pass"
+
+  - name: "no_new_uncovered"
+    condition: "no new files below 80% coverage"
+    message: "New code must have adequate coverage"

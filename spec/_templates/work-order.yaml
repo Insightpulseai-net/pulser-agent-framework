@@ -1,0 +1,293 @@
+# Work Order Template
+# Standard format for agent-to-agent task handoff
+# Version: 1.0.0
+
+# =============================================================================
+# WORK ORDER HEADER
+# =============================================================================
+
+work_order:
+  id: "WO-{YYYY}{MM}{DD}-{sequence}"
+  slug: "{project_slug}"
+  version: "1.0.0"
+  created_at: "{ISO8601_timestamp}"
+  created_by: "{agent_id}"
+
+  # Work order lifecycle
+  status: draft | pending | in_progress | blocked | completed | cancelled
+
+  # Priority (P0 = critical, P3 = nice to have)
+  priority: P0 | P1 | P2 | P3
+
+# =============================================================================
+# INTENT
+# =============================================================================
+# What outcome is expected? Be specific and measurable.
+
+intent:
+  summary: "{One sentence describing the goal}"
+
+  # Detailed description of what needs to happen
+  description: |
+    {Multi-line description of the work to be done.
+    Include context, background, and rationale.}
+
+  # Why this work matters
+  business_value: |
+    {Describe the business impact or user benefit}
+
+  # Success looks like...
+  success_definition: |
+    {Describe what "done" looks like in concrete terms}
+
+# =============================================================================
+# SCOPE
+# =============================================================================
+# What files, systems, and services are affected?
+
+scope:
+  # Repositories involved
+  repositories:
+    - name: "{repo_name}"
+      branch: "{branch_name}"
+
+  # Files/directories that will be modified
+  files:
+    modify:
+      - path: "{file_path}"
+        reason: "{why_this_file}"
+    create:
+      - path: "{file_path}"
+        reason: "{why_new_file}"
+    delete:
+      - path: "{file_path}"
+        reason: "{why_delete}"
+
+  # Systems/services affected
+  systems:
+    - name: "{system_name}"
+      type: api | database | frontend | edge_function | workflow
+      environment: preview | staging | production
+
+  # External dependencies
+  external:
+    - service: "{service_name}"
+      impact: read | write | both
+
+# =============================================================================
+# CONSTRAINTS
+# =============================================================================
+# Rules that must be followed during execution
+
+constraints:
+  # Technical constraints
+  technical:
+    - id: TC001
+      rule: "No manual UI interactions"
+      rationale: "Must be fully automatable"
+
+    - id: TC002
+      rule: "CI-only deployments"
+      rationale: "All changes must go through CI/CD"
+
+    - id: TC003
+      rule: "Schema changes require migration"
+      rationale: "Database changes must be versioned"
+
+  # Security constraints
+  security:
+    - id: SC001
+      rule: "No secrets in code"
+      rationale: "Use environment variables or secret managers"
+
+    - id: SC002
+      rule: "RLS required for all tables"
+      rationale: "Multi-tenant data isolation"
+
+  # Business constraints
+  business:
+    - id: BC001
+      rule: "{business_rule}"
+      rationale: "{why}"
+
+  # Compliance constraints
+  compliance:
+    - id: CC001
+      rule: "{compliance_rule}"
+      reference: "{regulatory_reference}"
+
+# =============================================================================
+# ACCEPTANCE CRITERIA
+# =============================================================================
+# How do we verify the work is complete?
+
+acceptance:
+  # Automated tests that must pass
+  tests:
+    unit:
+      required: true
+      coverage_threshold: 90
+      framework: pytest
+
+    integration:
+      required: true
+      coverage_threshold: 80
+      framework: pytest
+
+    e2e:
+      required: false
+      scenarios:
+        - name: "{scenario_name}"
+          steps: "{steps}"
+
+  # Endpoints that must work
+  endpoints:
+    - method: GET
+      path: "/api/v1/{resource}"
+      expected_status: 200
+      response_schema: "{schema_ref}"
+
+    - method: POST
+      path: "/api/v1/{resource}"
+      expected_status: 201
+      request_body: "{example_body}"
+
+  # Performance requirements
+  performance:
+    latency_p99_ms: 500
+    throughput_rps: 1000
+    memory_limit_mb: 512
+
+  # Screenshots/visual verification (if applicable)
+  visual:
+    - description: "{what_to_capture}"
+      viewport: "1920x1080"
+
+  # Manual verification steps (if any)
+  manual:
+    - step: "{verification_step}"
+      expected: "{expected_result}"
+
+# =============================================================================
+# ROLLBACK
+# =============================================================================
+# Exact commands/steps to undo this work
+
+rollback:
+  # Automated rollback script
+  script: |
+    #!/bin/bash
+    set -euo pipefail
+
+    # Revert code changes
+    git revert {commit_sha} --no-commit
+    git commit -m "Rollback: {work_order_id}"
+    git push
+
+    # Rollback database (if applicable)
+    supabase migration repair --status reverted
+    supabase db reset --db-url $DATABASE_URL
+
+    # Rollback deployment (if applicable)
+    ./scripts/deploy.sh --rollback --env=production
+
+  # Manual rollback steps (if automation fails)
+  manual_steps:
+    - step: "1. Access production dashboard"
+      url: "{dashboard_url}"
+
+    - step: "2. Navigate to deployments"
+      action: "Click 'Rollback' on current deployment"
+
+    - step: "3. Verify rollback"
+      verification: "Check health endpoint returns 200"
+
+  # Rollback verification
+  verification:
+    - command: "curl -f https://{domain}/health"
+      expected: "HTTP 200"
+
+    - command: "psql $DATABASE_URL -c 'SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1'"
+      expected: "{previous_migration_version}"
+
+  # Estimated rollback time
+  estimated_duration_minutes: 5
+
+  # Rollback owner (who to contact)
+  owner: "{agent_id or team}"
+
+# =============================================================================
+# HANDOFF
+# =============================================================================
+# Agent coordination and handoff details
+
+handoff:
+  # Source agent (who created this work order)
+  from:
+    agent_id: "{agent_id}"
+    agent_name: "{agent_name}"
+    timestamp: "{ISO8601}"
+
+  # Target agent (who should execute)
+  to:
+    agent_id: "{agent_id}"
+    agent_name: "{agent_name}"
+
+  # Handoff chain (for complex workflows)
+  chain:
+    - agent: planner
+      action: create_work_order
+      status: completed
+
+    - agent: implementer
+      action: execute_changes
+      status: pending
+
+    - agent: reviewer
+      action: validate
+      status: pending
+
+    - agent: release
+      action: deploy
+      status: pending
+
+  # Communication channel for updates
+  channel: "#release-train"
+
+  # Escalation path if blocked
+  escalation:
+    timeout_minutes: 60
+    escalate_to: "{agent_id or team}"
+
+# =============================================================================
+# METADATA
+# =============================================================================
+
+metadata:
+  # Related work orders
+  related:
+    - id: "WO-{related_id}"
+      relationship: blocks | blocked_by | relates_to
+
+  # GitHub references
+  github:
+    issue: "#{issue_number}"
+    pr: "#{pr_number}"
+    milestone: "{milestone_name}"
+
+  # Tags for categorization
+  tags:
+    - "{tag1}"
+    - "{tag2}"
+
+  # Audit trail
+  history:
+    - timestamp: "{ISO8601}"
+      agent: "{agent_id}"
+      action: created
+      details: "Initial work order creation"
+
+    - timestamp: "{ISO8601}"
+      agent: "{agent_id}"
+      action: updated
+      details: "{what_changed}"
