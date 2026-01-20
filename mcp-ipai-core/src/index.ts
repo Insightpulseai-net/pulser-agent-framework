@@ -41,6 +41,7 @@ import { tools as githubTools } from "./tools/github.js";
 import { tools as scoutTools } from "./tools/scout.js";
 import { tools as cesTools } from "./tools/ces.js";
 import { tools as opsTools } from "./tools/ops.js";
+import { tools as memoryTools } from "./tools/memory.js";
 
 // Aggregate all tools
 const allTools: McpTool[] = [
@@ -52,6 +53,7 @@ const allTools: McpTool[] = [
   ...scoutTools,
   ...cesTools,
   ...opsTools,
+  ...memoryTools,
 ];
 
 // Create tool lookup map
@@ -226,7 +228,7 @@ async function main() {
   await server.connect(transport);
 
   console.error(`MCP IPAI Core server running on stdio`);
-  console.error(`Loaded ${allTools.length} tools across ${8} namespaces:`);
+  console.error(`Loaded ${allTools.length} tools across ${9} namespaces:`);
   console.error(`  - supabase.* (${supabaseTools.length} tools)`);
   console.error(`  - odoo.* (${odooTools.length} tools)`);
   console.error(`  - n8n.* (${n8nTools.length} tools)`);
@@ -235,6 +237,7 @@ async function main() {
   console.error(`  - scout.* (${scoutTools.length} tools)`);
   console.error(`  - ces.* (${cesTools.length} tools)`);
   console.error(`  - ops.* (${opsTools.length} tools)`);
+  console.error(`  - memory.* (${memoryTools.length} tools)`);
 }
 
 main().catch((error) => {

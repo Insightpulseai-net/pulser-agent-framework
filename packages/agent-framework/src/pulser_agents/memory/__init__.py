@@ -6,6 +6,7 @@ Provides various memory backends including:
 - Redis-based storage (RedisMemoryProvider)
 - Vector store for semantic search (VectorMemoryProvider)
 - File-based persistence (FileMemoryProvider, JSONLMemoryProvider)
+- Verified memory for cross-agent knowledge sharing (VerifiedMemoryProvider)
 """
 
 from pulser_agents.memory.base import (
@@ -20,6 +21,14 @@ from pulser_agents.memory.vector_store import (
     VectorMemoryProvider,
     VectorSearchResult,
 )
+from pulser_agents.memory.verified_memory import (
+    Citation,
+    Memory,
+    VerificationResult,
+    VerifiedMemoryConfig,
+    VerifiedMemoryProvider,
+    format_memories_for_prompt,
+)
 
 __all__ = [
     "MemoryProvider",
@@ -32,4 +41,11 @@ __all__ = [
     "VectorSearchResult",
     "FileMemoryProvider",
     "JSONLMemoryProvider",
+    # Verified memory
+    "VerifiedMemoryProvider",
+    "VerifiedMemoryConfig",
+    "Citation",
+    "Memory",
+    "VerificationResult",
+    "format_memories_for_prompt",
 ]
